@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: yoshlar-postgres
+    environment:
+      POSTGRES_USER: yoshlar
+      POSTGRES_PASSWORD: yoshlar
+      POSTGRES_DB: yoshlar
+    ports:
+      - "5544:5432"
+    volumes:
+      - yoshlar_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yoshlar -d yoshlar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres_test:
+    image: postgres:16-alpine
+    container_name: yoshlar-postgres-test
+    environment:
+      POSTGRES_USER: yoshlar
+      POSTGRES_PASSWORD: yoshlar
+      POSTGRES_DB: yoshlar_test
+    ports:
+      - "5545:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yoshlar -d yoshlar_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: yoshlar-redis
+    ports:
+      - "6479:6379"
+    volumes:
+      - yoshlar_redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  yoshlar_pg:
+  yoshlar_redis:

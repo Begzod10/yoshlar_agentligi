@@ -1,0 +1,57 @@
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.config import get_settings
+from app.core.exceptions import AppError, app_error_handler
+from app.core.logging import configure_logging, get_logger
+from app.middleware.request_id import RequestIdMiddleware
+from app.modules.auth.router import router as auth_router
+from app.modules.districts.router import router as districts_router
+
+log = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    configure_logging()
+    log.info("startup", env=get_settings().app_env)
+    yield
+    log.info("shutdown")
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+    app = FastAPI(
+        title=settings.app_name,
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url="/docs" if settings.is_dev else None,
+        redoc_url=None,
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["X-Request-ID"],
+    )
+    app.add_middleware(RequestIdMiddleware)
+
+    app.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
+
+    app.include_router(auth_router)
+    app.include_router(districts_router)
+
+    @app.get("/healthz", tags=["meta"])
+    async def healthz() -> dict[str, str]:
+        return {"status": "ok"}
+
+    return app
+
+
+app = create_app()
