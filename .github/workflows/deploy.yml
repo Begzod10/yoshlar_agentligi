@@ -25,11 +25,11 @@ jobs:
             echo "=== Starting Dockerized Deployment ==="
             
             # 1. Navigate to the project directory
-            PROJECT_DIR="/var/www/yoshlar_agentligi"
+            PROJECT_DIR="/home/yoshlar_agentligi"
             if [ ! -d "$PROJECT_DIR" ]; then
               echo "Project directory does not exist. Creating..."
-              mkdir -p /var/www
-              cd /var/www
+              mkdir -p /home
+              cd /home
               git clone https://github.com/${{ github.repository }}.git yoshlar_agentligi
             fi
             
