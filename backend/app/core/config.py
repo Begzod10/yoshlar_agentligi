@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     jwt_refresh_ttl_days: int = 14
 
     cors_origins: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["http://localhost:3000"]
+        default_factory=lambda: ["http://localhost:3001"]
     )
 
     openai_api_key: str | None = None
