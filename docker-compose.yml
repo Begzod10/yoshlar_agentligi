@@ -46,6 +46,46 @@ services:
       timeout: 3s
       retries: 10
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: yoshlar-backend
+    restart: always
+    environment:
+      - APP_ENV=production
+      - APP_NAME=Yoshlar Backend
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+      - DATABASE_URL=postgresql+asyncpg://yoshlar:yoshlar@postgres:5432/yoshlar
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=production-secret-must-be-changed-in-prod-32-chars
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TTL_MIN=30
+      - JWT_REFRESH_TTL_DAYS=14
+      - CORS_ORIGINS=https://agency.gennis.uz
+      - LOG_LEVEL=INFO
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/media:/app/media
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: yoshlar-frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
 volumes:
   yoshlar_pg:
   yoshlar_redis:
