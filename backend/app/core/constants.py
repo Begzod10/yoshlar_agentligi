@@ -55,3 +55,16 @@ class MeetingAttendance(StrEnum):
     ATTENDED = "attended"
     NO_SHOW = "no_show"
     RESCHEDULED = "rescheduled"
+
+
+class FlagCategory(StrEnum):
+    DATA_QUALITY = "data_quality"
+    SUSPECTED_FRAUD = "suspected_fraud"
+    SAFEGUARDING = "safeguarding"
+    OTHER = "other"
+
+
+class FlagStatus(StrEnum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
