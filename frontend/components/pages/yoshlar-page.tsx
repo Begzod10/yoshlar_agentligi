@@ -4,6 +4,11 @@ import React from "react";
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
+import {
+  useForceAssignMasul,
+  useForceYouthStatus,
+  useRestoreYouth,
+} from "@/lib/api/hooks/use-admin";
 import { youthCategories } from "@/lib/mock-data";
 import type { Youth, ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
@@ -107,6 +112,9 @@ export function YoshlarPage() {
   const isTashkilotDirektor = currentUser?.role === "tashkilot_direktori";
   const canEdit = isAdmin || isDirektor || isTashkilotDirektor;
   const canAssign = isAdmin || isTashkilotDirektor;
+  const forceAssignMasul = useForceAssignMasul();
+  const forceYouthStatus = useForceYouthStatus();
+  const restoreYouth = useRestoreYouth();
 
   const visibleYouth = getVisibleYouth();
   const visibleMasullar = getVisibleMasullar();
@@ -204,6 +212,26 @@ export function YoshlarPage() {
 
     await new Promise((r) => setTimeout(r, 500));
 
+    if (isAdmin) {
+      try {
+        const result = await forceAssignMasul.mutateAsync({
+          youthId: selectedYouth.id,
+          masulId: selectedMasulId,
+          overrideDistrict: true,
+        });
+        updateYouth(selectedYouth.id, {
+          assignedMasulId: result.masulId ?? selectedMasulId,
+          status: result.status,
+        });
+        setIsAssignDialogOpen(false);
+        setSelectedYouth(null);
+        setSelectedMasulId("");
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
     // Validate district assignment
     const isValid = validateDistrictAssignment(selectedYouth.districtId, selectedMasulId);
     if (!isValid) {
@@ -224,12 +252,38 @@ export function YoshlarPage() {
     setIsLoading(true);
 
     await new Promise((r) => setTimeout(r, 500));
+    if (isAdmin) {
+      try {
+        const result = await forceYouthStatus.mutateAsync({
+          youthId: selectedYouth.id,
+          status: "removed",
+        });
+        updateYouth(selectedYouth.id, { status: result.status });
+      } finally {
+        setIsLoading(false);
+        setIsRemoveDialogOpen(false);
+        setSelectedYouth(null);
+        setRemoveReason("");
+      }
+      return;
+    }
+
     removeYouth(selectedYouth.id, removeReason);
 
     setIsLoading(false);
     setIsRemoveDialogOpen(false);
     setSelectedYouth(null);
     setRemoveReason("");
+  };
+
+  const handleRestoreYouth = async (youth: Youth) => {
+    setIsLoading(true);
+    try {
+      const result = await restoreYouth.mutateAsync(youth.id);
+      updateYouth(youth.id, { status: result.status });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -240,6 +294,8 @@ export function YoshlarPage() {
         return <Badge variant="secondary">Nofaol</Badge>;
       case "graduated":
         return <Badge className="bg-chart-1 text-primary-foreground">Yakunlangan</Badge>;
+      case "removed":
+        return <Badge className="bg-destructive text-destructive-foreground">Chiqarilgan</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -468,6 +524,12 @@ export function YoshlarPage() {
                                 Chiqarish
                               </DropdownMenuItem>
                             </>
+                          )}
+                          {isAdmin && youth.status !== "active" && (
+                            <DropdownMenuItem onClick={() => void handleRestoreYouth(youth)}>
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Admin restore
+                            </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>

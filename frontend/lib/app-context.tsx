@@ -7,8 +7,27 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api/client";
+import { useCurrentUser } from "@/lib/auth/session";
+import {
+  useOrganizations,
+  useMasullar,
+  useYouthList,
+  usePlans,
+  useMeetings,
+} from "@/lib/api/hooks/use-core-api";
+import type {
+  MasulRead,
+  MeetingRead,
+  OrganizationRead,
+  PlanRead,
+  User as ApiUser,
+  YouthRead,
+} from "@/lib/api/types";
 import type {
   User,
   UserRole,
@@ -114,6 +133,7 @@ interface AppContextType {
   // Toast notifications
   toasts: Toast[];
   addToast: (toast: Omit<Toast, "id">) => void;
+  showToast: (title: string, type?: Toast["type"], description?: string) => void;
   removeToast: (id: string) => void;
 
   // Role-based data filters
@@ -137,7 +157,133 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+function asDistrict(districtId?: string | null): ToshkentDistrict {
+  return (districtId || TOSHKENT_VILOYATI_DISTRICTS[0]) as ToshkentDistrict;
+}
+
+function apiUserToAppUser(user: ApiUser): User {
+  return {
+    id: user.id,
+    fullName: user.fullName,
+    email: user.email,
+    role: user.role,
+    phone: user.phone ?? undefined,
+    status: user.isActive ? "active" : "inactive",
+    lastLogin: user.lastLoginAt ?? undefined,
+    districtId: user.districtId ? asDistrict(user.districtId) : undefined,
+    createdAt: user.createdAt,
+  };
+}
+
+function organizationToApp(org: OrganizationRead): Organization {
+  return {
+    id: org.id,
+    name: org.name,
+    districtId: asDistrict(org.districtId),
+    address: org.address ?? "",
+    directorId: "",
+    directorName: org.headName ?? "",
+    masullarCount: 0,
+    yoshlarCount: 0,
+    createdAt: org.createdAt,
+  };
+}
+
+function masulToApp(masul: MasulRead, organizations: Organization[]): Masul {
+  const organization = organizations.find((org) => org.id === masul.organizationId);
+  return {
+    id: masul.id,
+    fullName: masul.fullName,
+    email: "",
+    phone: masul.phone ?? "",
+    districtId: asDistrict(masul.districtId),
+    organizationId: masul.organizationId ?? "",
+    organizationName: organization?.name ?? "",
+    assignedYouthCount: 0,
+    completedPlansCount: 0,
+    meetingsCount: 0,
+    aiScore: 0,
+    createdAt: masul.createdAt,
+  };
+}
+
+function youthToApp(youth: YouthRead, masullar: Masul[], organizations: Organization[]): Youth {
+  const masul = masullar.find((item) => item.id === youth.masulId);
+  const organization = organizations.find((item) => item.id === youth.organizationId);
+  return {
+    id: youth.id,
+    fullName: youth.fullName,
+    birthDate: youth.dateOfBirth ?? "",
+    address: youth.address ?? "",
+    districtId: asDistrict(youth.districtId),
+    phone: youth.contact ?? "",
+    category: "boshqa",
+    status: youth.status,
+    assignedMasulId: youth.masulId ?? undefined,
+    assignedMasulName: masul?.fullName,
+    organizationId: youth.organizationId ?? undefined,
+    organizationName: organization?.name,
+    aiScore: 0,
+    plansCount: 0,
+    meetingsCount: 0,
+    createdAt: youth.createdAt,
+    removalReason:
+      typeof youth.removalProposal?.reason === "string"
+        ? youth.removalProposal.reason
+        : undefined,
+  };
+}
+
+function planToApp(plan: PlanRead, youth: Youth[], masullar: Masul[]): IndividualPlan {
+  const planYouth = youth.find((item) => item.id === plan.youthId);
+  const masul = masullar.find((item) => item.id === plan.masulId);
+  return {
+    id: plan.id,
+    youthId: plan.youthId,
+    youthName: planYouth?.fullName ?? "",
+    masulId: plan.masulId ?? "",
+    masulName: masul?.fullName ?? "",
+    title: plan.title,
+    description: plan.goal ?? "",
+    startDate: plan.startDate ?? "",
+    endDate: plan.endDate ?? "",
+    status: plan.status === "draft" ? "planned" : plan.status,
+    progress: plan.progress,
+    createdAt: plan.createdAt,
+  };
+}
+
+function meetingToApp(meeting: MeetingRead, youth: Youth[], masullar: Masul[]): Meeting {
+  const meetingYouth = youth.find((item) => item.id === meeting.youthId);
+  const masul = masullar.find((item) => item.id === meeting.masulId);
+  return {
+    id: meeting.id,
+    youthId: meeting.youthId,
+    youthName: meetingYouth?.fullName ?? "",
+    masulId: meeting.masulId ?? "",
+    masulName: masul?.fullName ?? "",
+    title: meeting.type ?? "Uchrashuv",
+    description: meeting.agenda ?? "",
+    date: meeting.scheduledAt.slice(0, 10),
+    time: meeting.scheduledAt.slice(11, 16),
+    location: meeting.location ?? "",
+    type: meeting.type,
+    status: meeting.attendanceStatus === "attended" ? "completed" : "scheduled",
+    notes: meeting.attendanceNotes ?? undefined,
+    photos: [],
+    createdAt: meeting.createdAt,
+  };
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
+  const sessionUser = useCurrentUser();
+  const organizationsQuery = useOrganizations({ limit: 200, enabled: Boolean(sessionUser) });
+  const masullarQuery = useMasullar({ limit: 200, enabled: Boolean(sessionUser) });
+  const youthQuery = useYouthList({ limit: 200, enabled: Boolean(sessionUser) });
+  const plansQuery = usePlans({ limit: 200, enabled: Boolean(sessionUser) });
+  const meetingsQuery = useMeetings({ limit: 200, enabled: Boolean(sessionUser) });
+
   // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
@@ -165,6 +311,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Toast State
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  useEffect(() => {
+    setCurrentUser(sessionUser ? apiUserToAppUser(sessionUser) : null);
+  }, [sessionUser]);
+
+  useEffect(() => {
+    if (organizationsQuery.data) {
+      setOrganizations(organizationsQuery.data.data.map(organizationToApp));
+    }
+  }, [organizationsQuery.data]);
+
+  useEffect(() => {
+    if (masullarQuery.data) {
+      setMasullar(masullarQuery.data.data.map((item) => masulToApp(item, organizations)));
+    }
+  }, [masullarQuery.data, organizations]);
+
+  useEffect(() => {
+    if (youthQuery.data) {
+      setYouth(youthQuery.data.data.map((item) => youthToApp(item, masullar, organizations)));
+      setRemovedYouth(
+        youthQuery.data.data
+          .filter((item) => item.status === "removed" || item.status === "graduated")
+          .map((item) => youthToApp(item, masullar, organizations))
+      );
+    }
+  }, [youthQuery.data, masullar, organizations]);
+
+  useEffect(() => {
+    if (plansQuery.data) {
+      setPlans(plansQuery.data.data.map((item) => planToApp(item, youth, masullar)));
+    }
+  }, [plansQuery.data, youth, masullar]);
+
+  useEffect(() => {
+    if (meetingsQuery.data) {
+      setMeetings(meetingsQuery.data.data.map((item) => meetingToApp(item, youth, masullar)));
+    }
+  }, [meetingsQuery.data, youth, masullar]);
 
   // Auth Functions
   const login = useCallback(
@@ -219,6 +404,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4000);
   }, []);
+
+  const showToast = useCallback(
+    (title: string, type: Toast["type"] = "info", description?: string) => {
+      addToast({ title, description, type });
+    },
+    [addToast]
+  );
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -338,6 +530,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createdAt: today(),
       };
       setOrganizations((prev) => [...prev, newOrg]);
+      void api
+        .post<OrganizationRead>("/api/organizations", {
+          name: org.name,
+          districtId: org.districtId,
+          address: org.address || null,
+          headName: org.directorName || null,
+        })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["organizations"] }))
+        .catch(() =>
+          addToast({
+            title: "Backendga saqlanmadi",
+            description: "Tashkilot lokal qo'shildi, lekin API xato qaytardi",
+            type: "warning",
+          })
+        );
 
       // Auto-create director user with district
       const directorUser: User = {
@@ -360,7 +567,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       return newOrg;
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   const updateOrganization = useCallback(
@@ -368,24 +575,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setOrganizations((prev) =>
         prev.map((org) => (org.id === id ? { ...org, ...data } : org))
       );
+      void api
+        .patch<OrganizationRead>(`/api/organizations/${id}`, {
+          name: data.name,
+          districtId: data.districtId,
+          address: data.address,
+          headName: data.directorName,
+        })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["organizations"] }))
+        .catch(() =>
+          addToast({
+            title: "Backend yangilanmadi",
+            type: "warning",
+          })
+        );
       addToast({
         title: "Tashkilot yangilandi",
         description: "O'zgarishlar saqlandi",
         type: "success",
       });
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   const deleteOrganization = useCallback(
     (id: string) => {
       setOrganizations((prev) => prev.filter((org) => org.id !== id));
+      void api
+        .delete<void>(`/api/organizations/${id}`, { query: { confirm: true } })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["organizations"] }))
+        .catch(() =>
+          addToast({
+            title: "Backenddan o'chirilmadi",
+            type: "warning",
+          })
+        );
       addToast({
         title: "Tashkilot o'chirildi",
         type: "info",
       });
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   // Youth CRUD
@@ -407,6 +637,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createdAt: today(),
       };
       setYouth((prev) => [...prev, newYouth]);
+      void api
+        .post<YouthRead>("/api/youth", {
+          fullName: youthData.fullName,
+          districtId: youthData.districtId,
+          masulId: youthData.assignedMasulId ?? null,
+          organizationId: youthData.organizationId ?? null,
+          contact: youthData.phone || null,
+          dateOfBirth: youthData.birthDate || null,
+          address: youthData.address || null,
+          notes: youthData.category || null,
+        })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["youth"] }))
+        .catch(() =>
+          addToast({
+            title: "Backendga saqlanmadi",
+            description: "Yosh lokal qo'shildi, lekin API xato qaytardi",
+            type: "warning",
+          })
+        );
 
       // Update organization youth count
       if (newYouth.organizationId) {
@@ -426,18 +675,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       return newYouth;
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   const updateYouth = useCallback(
     (id: string, data: Partial<Youth>) => {
       setYouth((prev) => prev.map((y) => (y.id === id ? { ...y, ...data } : y)));
+      void api
+        .patch<YouthRead>(`/api/youth/${id}`, {
+          fullName: data.fullName,
+          masulId: data.assignedMasulId,
+          organizationId: data.organizationId,
+          contact: data.phone,
+          dateOfBirth: data.birthDate,
+          address: data.address,
+          notes: data.category,
+        })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["youth"] }))
+        .catch(() =>
+          addToast({
+            title: "Backend yangilanmadi",
+            type: "warning",
+          })
+        );
       addToast({
         title: "Ma'lumotlar yangilandi",
         type: "success",
       });
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   const assignYouthToMasul = useCallback(
@@ -485,6 +751,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
             : m
         )
       );
+      void api
+        .post<YouthRead>(`/api/youth/${youthId}/assign-masul`, { masulId })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["youth"] }))
+        .catch(() =>
+          addToast({
+            title: "Backendda biriktirilmadi",
+            type: "warning",
+          })
+        );
 
       addToast({
         title: "Yosh biriktirildi",
@@ -494,7 +769,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       return true;
     },
-    [youth, masullar, addToast]
+    [youth, masullar, addToast, queryClient]
   );
 
   const removeYouth = useCallback(
@@ -511,6 +786,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
             removalDate: today(),
           },
         ]);
+        void api
+          .post<YouthRead>(`/api/youth/${youthId}/status`, { status: "removed" })
+          .then(() => queryClient.invalidateQueries({ queryKey: ["youth"] }))
+          .catch(() =>
+            addToast({
+              title: "Backendda status yangilanmadi",
+              type: "warning",
+            })
+          );
 
         // Update organization count
         if (youthToRemove.organizationId) {
@@ -530,7 +814,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
       }
     },
-    [youth, addToast]
+    [youth, addToast, queryClient]
   );
 
   // Masul CRUD
@@ -552,6 +836,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createdAt: today(),
       };
       setMasullar((prev) => [...prev, newMasul]);
+      void api
+        .post<MasulRead>("/api/masullar", {
+          fullName: masulData.fullName,
+          districtId: masulData.districtId,
+          organizationId: masulData.organizationId || null,
+          phone: masulData.phone || null,
+          position: null,
+        })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["masullar"] }))
+        .catch(() =>
+          addToast({
+            title: "Backendga saqlanmadi",
+            description: "Mas'ul lokal qo'shildi, lekin API xato qaytardi",
+            type: "warning",
+          })
+        );
 
       // Also create user for masul with district
       const masulUser: User = {
@@ -582,7 +882,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       return newMasul;
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   const updateMasul = useCallback(
@@ -590,12 +890,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMasullar((prev) =>
         prev.map((m) => (m.id === id ? { ...m, ...data } : m))
       );
+      void api
+        .patch<MasulRead>(`/api/masullar/${id}`, {
+          fullName: data.fullName,
+          organizationId: data.organizationId,
+          phone: data.phone,
+        })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["masullar"] }))
+        .catch(() =>
+          addToast({
+            title: "Backend yangilanmadi",
+            type: "warning",
+          })
+        );
       addToast({
         title: "Mas'ul yangilandi",
         type: "success",
       });
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   const deleteMasul = useCallback(
@@ -603,6 +916,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const masul = masullar.find((m) => m.id === id);
       if (masul) {
         setMasullar((prev) => prev.filter((m) => m.id !== id));
+        void api
+          .delete<void>(`/api/masullar/${id}`)
+          .then(() => queryClient.invalidateQueries({ queryKey: ["masullar"] }))
+          .catch(() =>
+            addToast({
+              title: "Backenddan o'chirilmadi",
+              type: "warning",
+            })
+          );
         setOrganizations((prev) =>
           prev.map((org) =>
             org.id === masul.organizationId
@@ -616,7 +938,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
       }
     },
-    [masullar, addToast]
+    [masullar, addToast, queryClient]
   );
 
   // Plan CRUD
@@ -628,6 +950,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createdAt: today(),
       };
       setPlans((prev) => [...prev, newPlan]);
+      void api
+        .post<PlanRead>("/api/plans", {
+          youthId: planData.youthId,
+          title: planData.title,
+          goal: planData.description || null,
+          milestones: [],
+          startDate: planData.startDate || null,
+          endDate: planData.endDate || null,
+        })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["plans"] }))
+        .catch(() =>
+          addToast({
+            title: "Backendga saqlanmadi",
+            description: "Reja lokal qo'shildi, lekin API xato qaytardi",
+            type: "warning",
+          })
+        );
       addToast({
         title: "Reja qo'shildi",
         description: `"${newPlan.title}" muvaffaqiyatli yaratildi`,
@@ -635,7 +974,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       return newPlan;
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   const updatePlan = useCallback(
@@ -643,23 +982,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setPlans((prev) =>
         prev.map((p) => (p.id === id ? { ...p, ...data } : p))
       );
+      void api
+        .patch<PlanRead>(`/api/plans/${id}`, {
+          title: data.title,
+          goal: data.description,
+          status: data.status === "planned" ? "draft" : data.status,
+          progress: data.progress,
+          startDate: data.startDate,
+          endDate: data.endDate,
+        })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["plans"] }))
+        .catch(() =>
+          addToast({
+            title: "Backend yangilanmadi",
+            type: "warning",
+          })
+        );
       addToast({
         title: "Reja yangilandi",
         type: "success",
       });
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   const deletePlan = useCallback(
     (id: string) => {
       setPlans((prev) => prev.filter((p) => p.id !== id));
+      void api
+        .delete<void>(`/api/plans/${id}`)
+        .then(() => queryClient.invalidateQueries({ queryKey: ["plans"] }))
+        .catch(() =>
+          addToast({
+            title: "Backenddan o'chirilmadi",
+            type: "warning",
+          })
+        );
       addToast({
         title: "Reja o'chirildi",
         type: "info",
       });
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   // Meeting CRUD
@@ -671,6 +1035,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createdAt: today(),
       };
       setMeetings((prev) => [...prev, newMeeting]);
+      void api
+        .post<MeetingRead>("/api/meetings", {
+          youthId: meetingData.youthId,
+          scheduledAt: meetingData.time
+            ? `${meetingData.date}T${meetingData.time}:00`
+            : meetingData.date,
+          type: meetingData.type || meetingData.title || null,
+          location: meetingData.location || null,
+          agenda: meetingData.description || null,
+        })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["meetings"] }))
+        .catch(() =>
+          addToast({
+            title: "Backendga saqlanmadi",
+            description: "Uchrashuv lokal qo'shildi, lekin API xato qaytardi",
+            type: "warning",
+          })
+        );
       addToast({
         title: "Uchrashuv qo'shildi",
         description: `"${newMeeting.title}" rejalashtirildi`,
@@ -678,7 +1060,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       return newMeeting;
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   const updateMeeting = useCallback(
@@ -686,23 +1068,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMeetings((prev) =>
         prev.map((m) => (m.id === id ? { ...m, ...data } : m))
       );
+      void api
+        .patch<MeetingRead>(`/api/meetings/${id}`, {
+          scheduledAt: data.time && data.date ? `${data.date}T${data.time}:00` : data.date,
+          type: data.type ?? data.title,
+          location: data.location,
+          agenda: data.description,
+        })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["meetings"] }))
+        .catch(() =>
+          addToast({
+            title: "Backend yangilanmadi",
+            type: "warning",
+          })
+        );
       addToast({
         title: "Uchrashuv yangilandi",
         type: "success",
       });
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   const deleteMeeting = useCallback(
     (id: string) => {
       setMeetings((prev) => prev.filter((m) => m.id !== id));
+      void api
+        .delete<void>(`/api/meetings/${id}`)
+        .then(() => queryClient.invalidateQueries({ queryKey: ["meetings"] }))
+        .catch(() =>
+          addToast({
+            title: "Backenddan o'chirilmadi",
+            type: "warning",
+          })
+        );
       addToast({
         title: "Uchrashuv o'chirildi",
         type: "info",
       });
     },
-    [addToast]
+    [addToast, queryClient]
   );
 
   // Completed Work
@@ -955,6 +1360,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deleteUser,
         toasts,
         addToast,
+        showToast,
         removeToast,
         getVisibleYouth,
         getVisibleOrganizations,
