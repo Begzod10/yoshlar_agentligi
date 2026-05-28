@@ -10,6 +10,11 @@ from app.core.logging import configure_logging, get_logger
 from app.middleware.request_id import RequestIdMiddleware
 from app.modules.auth.router import router as auth_router
 from app.modules.districts.router import router as districts_router
+from app.modules.flags.router import router as flags_router
+from app.modules.organizations.router import router as organizations_router
+from app.modules.stats.router import router as stats_router
+from app.modules.audit.router import router as audit_router
+from app.modules.reports.router import router as reports_router
 
 log = get_logger(__name__)
 
@@ -46,6 +51,11 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_router)
     app.include_router(districts_router)
+    app.include_router(flags_router)
+    app.include_router(organizations_router)
+    app.include_router(stats_router)
+    app.include_router(audit_router)
+    app.include_router(reports_router)
 
     @app.get("/healthz", tags=["meta"])
     async def healthz() -> dict[str, str]:
