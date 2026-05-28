@@ -35,6 +35,9 @@ import {
   Moon,
   Sun,
   Monitor,
+  Database,
+  Download,
+  RotateCcw,
 } from "lucide-react";
 
 const roleLabels = {
@@ -47,6 +50,7 @@ const roleLabels = {
 
 export function SozlamalarPage() {
   const { currentUser, showToast } = useApp();
+  const isAdmin = currentUser?.role === "admin";
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [notifications, setNotifications] = useState({
@@ -103,6 +107,22 @@ export function SozlamalarPage() {
             <Palette className="h-4 w-4" />
             Ko'rinish
           </TabsTrigger>
+          {isAdmin && (
+            <>
+              <TabsTrigger value="audit" className="gap-2">
+                <Shield className="h-4 w-4" />
+                Audit log
+              </TabsTrigger>
+              <TabsTrigger value="system" className="gap-2">
+                <Monitor className="h-4 w-4" />
+                System
+              </TabsTrigger>
+              <TabsTrigger value="backups" className="gap-2">
+                <Database className="h-4 w-4" />
+                Backups
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         {/* Profile Tab */}
@@ -534,6 +554,158 @@ export function SozlamalarPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="audit" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Audit log</CardTitle>
+                <CardDescription>
+                  Admin harakatlari va muhim tizim voqealari
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {[
+                    {
+                      action: "user.create",
+                      actor: "Abdullayev Sardor",
+                      entity: "Foydalanuvchi",
+                      time: "Bugun, 09:30",
+                    },
+                    {
+                      action: "user.reset_password",
+                      actor: "Abdullayev Sardor",
+                      entity: "Mas'ul hodim",
+                      time: "Kecha, 17:15",
+                    },
+                    {
+                      action: "district.override",
+                      actor: "Abdullayev Sardor",
+                      entity: "Yosh biriktirish",
+                      time: "24 May, 11:05",
+                    },
+                  ].map((row) => (
+                    <div
+                      key={`${row.action}-${row.time}`}
+                      className="grid gap-3 rounded-md border p-4 md:grid-cols-[180px_1fr_180px]"
+                    >
+                      <Badge variant="outline" className="w-fit">
+                        {row.action}
+                      </Badge>
+                      <div>
+                        <p className="font-medium">{row.entity}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Actor: {row.actor}
+                        </p>
+                      </div>
+                      <p className="text-sm text-muted-foreground md:text-right">
+                        {row.time}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="system" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">System</CardTitle>
+                <CardDescription>
+                  Admin uchun tizim darajasidagi boshqaruvlar
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">Maintenance mode</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Foydalanuvchilar uchun tizimga kirishni vaqtincha cheklash
+                    </p>
+                  </div>
+                  <Switch />
+                </div>
+                <Separator />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-md border p-4">
+                    <p className="font-medium">Tumanlar ro'yxati</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      14 ta Toshkent viloyati tumani. v1 uchun read-only.
+                    </p>
+                    <Button variant="outline" size="sm" className="mt-4 bg-transparent" disabled>
+                      Tahrirlash
+                    </Button>
+                  </div>
+                  <div className="rounded-md border p-4">
+                    <p className="font-medium">Role permission matrix</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Rollar va sahifa huquqlari. v1 uchun read-only.
+                    </p>
+                    <Button variant="outline" size="sm" className="mt-4 bg-transparent" disabled>
+                      Tahrirlash
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="backups" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Backups</CardTitle>
+                <CardDescription>
+                  Zaxira nusxalarni ko'rish, yuklab olish va tiklash
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {[
+                  { name: "daily-2026-05-28.sql", size: "48 MB", status: "Tayyor" },
+                  { name: "daily-2026-05-27.sql", size: "47 MB", status: "Tayyor" },
+                  { name: "weekly-2026-05-24.sql", size: "286 MB", status: "Arxiv" },
+                ].map((backup) => (
+                  <div
+                    key={backup.name}
+                    className="flex flex-col gap-3 rounded-md border p-4 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div>
+                      <p className="font-medium">{backup.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {backup.size} · {backup.status}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-transparent"
+                        onClick={() => showToast("Backup yuklab olish UI tayyor", "info")}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Yuklab olish
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-transparent"
+                        onClick={() => showToast("Restore backend ulanganda ishlaydi", "info")}
+                      >
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        Restore
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

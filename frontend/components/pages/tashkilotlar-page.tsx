@@ -65,7 +65,6 @@ export function TashkilotlarPage() {
     updateOrganization,
     deleteOrganization,
     selectedDistrict,
-    canViewDistrict,
     showToast,
   } = useApp();
 

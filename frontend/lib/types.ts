@@ -31,6 +31,9 @@ export interface User {
   fullName: string;
   email: string;
   role: UserRole;
+  phone?: string;
+  status?: "active" | "inactive";
+  lastLogin?: string;
   organizationId?: string;
   organizationName?: string;
   districtId?: ToshkentDistrict; // District assignment for tashkilot_direktori

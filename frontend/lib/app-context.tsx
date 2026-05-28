@@ -114,6 +114,7 @@ interface AppContextType {
   // Toast notifications
   toasts: Toast[];
   addToast: (toast: Omit<Toast, "id">) => void;
+  showToast: (title: string, type?: Toast["type"], description?: string) => void;
   removeToast: (id: string) => void;
 
   // Role-based data filters
@@ -219,6 +220,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4000);
   }, []);
+
+  const showToast = useCallback(
+    (title: string, type: Toast["type"] = "info", description?: string) => {
+      addToast({ title, description, type });
+    },
+    [addToast]
+  );
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -955,6 +963,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deleteUser,
         toasts,
         addToast,
+        showToast,
         removeToast,
         getVisibleYouth,
         getVisibleOrganizations,

@@ -52,7 +52,7 @@ export function DistrictSelector({
       <SelectContent>
         {canShowAll && (
           <SelectItem value="all">
-            <span className="font-medium">Barcha tumanlar</span>
+            <span className="font-medium">Barchasi</span>
           </SelectItem>
         )}
         {TOSHKENT_VILOYATI_DISTRICTS.map((district) => (
