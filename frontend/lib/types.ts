@@ -61,7 +61,7 @@ export interface Youth {
   districtId: ToshkentDistrict; // Required district
   phone: string;
   category: string;
-  status: "active" | "inactive" | "graduated";
+  status: "active" | "inactive" | "graduated" | "removed";
   assignedMasulId?: string;
   assignedMasulName?: string;
   organizationId?: string;
@@ -99,8 +99,9 @@ export interface IndividualPlan {
   description: string;
   startDate: string;
   endDate: string;
-  status: "planned" | "in_progress" | "completed" | "cancelled";
+  status: "planned" | "pending" | "in_progress" | "completed" | "cancelled";
   progress: number;
+  tasks?: unknown[];
   createdAt: string;
 }
 
@@ -113,7 +114,9 @@ export interface Meeting {
   title: string;
   description: string;
   date: string;
+  time?: string;
   location: string;
+  type?: "individual" | "group" | "home_visit" | "online" | string | null;
   status: "scheduled" | "completed" | "cancelled";
   notes?: string;
   photos?: string[];

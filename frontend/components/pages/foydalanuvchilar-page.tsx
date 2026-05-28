@@ -4,8 +4,17 @@ import { useMemo, useState } from "react";
 import type React from "react";
 import { z } from "zod";
 import { useApp } from "@/lib/app-context";
-import type { ToshkentDistrict, User, UserRole } from "@/lib/types";
+import type { ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
+import { useCurrentUser } from "@/lib/auth/session";
+import type { User, UserRole } from "@/lib/api/types";
+import {
+  useAdminUsers,
+  useCreateAdminUser,
+  useDeleteAdminUser,
+  useResetAdminUserPassword,
+  useUpdateAdminUser,
+} from "@/lib/api/hooks/use-admin-users";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -62,8 +71,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Copy,
   Edit,
   Eye,
+  EyeOff,
   KeyRound,
   MapPin,
   MoreHorizontal,
@@ -94,12 +105,13 @@ const roleColors: Record<UserRole, string> = {
 
 const scopedRoles: UserRole[] = ["tashkilot_direktori", "masul_hodim"];
 const allRoles = Object.keys(roleLabels) as UserRole[];
+const defaultPassword = "12345678";
 
 const userFormSchema = z
   .object({
     fullName: z.string().trim().min(3, "To'liq ism kamida 3 ta belgidan iborat bo'lishi kerak"),
     email: z.string().trim().email("Email noto'g'ri kiritilgan"),
-    password: z.string().optional(),
+    password: z.string().min(8, "Parol kamida 8 ta belgidan iborat bo'lishi kerak").optional(),
     role: z.enum([
       "admin",
       "direktor",
@@ -137,7 +149,7 @@ function initials(name: string) {
 }
 
 function userStatus(user: User) {
-  return user.status ?? "active";
+  return user.isActive ? "active" : "inactive";
 }
 
 function formatDate(date?: string) {
@@ -150,8 +162,8 @@ function formatDate(date?: string) {
 }
 
 export function FoydalanuvchilarPage() {
-  const { currentUser, users, addUser, updateUser, deleteUser, showToast } =
-    useApp();
+  const { showToast } = useApp();
+  const sessionUser = useCurrentUser();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
@@ -161,12 +173,30 @@ export function FoydalanuvchilarPage() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [resetPassword, setResetPassword] = useState<string | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<User | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [addRole, setAddRole] = useState<UserRole>("admin");
   const [editRole, setEditRole] = useState<UserRole>("admin");
 
-  const canManageUsers = currentUser?.role === "admin";
+  const usersQuery = useAdminUsers({
+    role: selectedRoles.length === 1 ? selectedRoles[0] : undefined,
+    districtId: districtFilter === "all" ? undefined : districtFilter,
+    search: searchQuery.trim() || undefined,
+    limit: 100,
+  });
+  const createUser = useCreateAdminUser();
+  const updateUser = useUpdateAdminUser();
+  const deleteUser = useDeleteAdminUser();
+  const resetUserPassword = useResetAdminUserPassword();
+
+  const users = usersQuery.data?.data ?? [];
+  const canManageUsers = sessionUser?.role === "admin";
+  const isMutating =
+    createUser.isPending ||
+    updateUser.isPending ||
+    deleteUser.isPending ||
+    resetUserPassword.isPending;
 
   const filteredUsers = useMemo(() => {
     return users.filter((user) => {
@@ -187,7 +217,7 @@ export function FoydalanuvchilarPage() {
   }, [districtFilter, searchQuery, selectedRoles, statusFilter, users]);
 
   const stats = {
-    total: users.length,
+    total: usersQuery.data?.total ?? users.length,
     active: users.filter((user) => userStatus(user) === "active").length,
     admins: users.filter((user) => user.role === "admin").length,
     scoped: users.filter((user) => scopedRoles.includes(user.role)).length,
@@ -235,82 +265,134 @@ export function FoydalanuvchilarPage() {
   };
 
   const handleAddUser = (event: React.FormEvent<HTMLFormElement>) => {
+    void submitAddUser(event);
+  };
+
+  const submitAddUser = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = readForm(event.currentTarget, true);
     if (!data) return;
 
-    addUser({
-      fullName: data.fullName,
-      email: data.email,
-      role: data.role,
-      districtId: data.districtId as ToshkentDistrict | undefined,
-      phone: data.phone,
-      status: "active",
-      lastLogin: undefined,
-    });
-    setIsAddDialogOpen(false);
-    setAddRole("admin");
-    showToast("Foydalanuvchi muvaffaqiyatli qo'shildi", "success");
+    try {
+      await createUser.mutateAsync({
+        fullName: data.fullName,
+        email: data.email,
+        password: data.password ?? "",
+        role: data.role,
+        districtId: data.districtId ?? null,
+        phone: data.phone || null,
+      });
+      setIsAddDialogOpen(false);
+      setAddRole("admin");
+      showToast("Foydalanuvchi muvaffaqiyatli qo'shildi", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Foydalanuvchi qo'shilmadi", "error");
+    }
   };
 
   const handleEditUser = (event: React.FormEvent<HTMLFormElement>) => {
+    void submitEditUser(event);
+  };
+
+  const submitEditUser = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedUser) return;
-    const data = readForm(event.currentTarget, false);
-    if (!data) return;
+    const formData = new FormData(event.currentTarget);
+    const fullName = String(formData.get("fullName") || "").trim();
+    const phone = String(formData.get("phone") || "").trim();
 
-    updateUser(selectedUser.id, {
-      fullName: data.fullName,
-      email: data.email,
-      role: data.role,
-      districtId: data.districtId as ToshkentDistrict | undefined,
-      phone: data.phone,
-      organizationId: undefined,
-      organizationName: undefined,
-    });
-    setIsEditDialogOpen(false);
-    setSelectedUser(null);
-    showToast("Foydalanuvchi muvaffaqiyatli tahrirlandi", "success");
+    if (fullName.length < 3) {
+      showToast("To'liq ism kamida 3 ta belgidan iborat bo'lishi kerak", "error");
+      return;
+    }
+
+    try {
+      await updateUser.mutateAsync({
+        id: selectedUser.id,
+        body: {
+          fullName,
+          phone: phone || null,
+        },
+      });
+      setIsEditDialogOpen(false);
+      setSelectedUser(null);
+      showToast("Foydalanuvchi muvaffaqiyatli tahrirlandi", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Foydalanuvchi tahrirlanmadi", "error");
+    }
   };
 
   const handleDeactivateUser = (user: User) => {
-    if (user.id === currentUser?.id) {
+    void toggleUserActive(user);
+  };
+
+  const toggleUserActive = async (user: User) => {
+    if (user.id === sessionUser?.id) {
       showToast("O'zingizni deaktivatsiya qila olmaysiz", "error");
       return;
     }
-    updateUser(user.id, {
-      status: userStatus(user) === "active" ? "inactive" : "active",
-    });
-    showToast(
-      userStatus(user) === "active"
-        ? "Foydalanuvchi deaktivatsiya qilindi"
-        : "Foydalanuvchi faollashtirildi",
-      "success"
-    );
+    try {
+      await updateUser.mutateAsync({
+        id: user.id,
+        body: { isActive: !user.isActive },
+      });
+      showToast(
+        user.isActive
+          ? "Foydalanuvchi deaktivatsiya qilindi"
+          : "Foydalanuvchi faollashtirildi",
+        "success"
+      );
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Holat yangilanmadi", "error");
+    }
   };
 
   const handleDeleteUser = () => {
+    void submitDeleteUser();
+  };
+
+  const submitDeleteUser = async () => {
     if (!deleteCandidate) return;
-    if (deleteCandidate.id === currentUser?.id) {
+    if (deleteCandidate.id === sessionUser?.id) {
       showToast("O'zingizni o'chira olmaysiz", "error");
       return;
     }
-    deleteUser(deleteCandidate.id);
-    setDeleteCandidate(null);
-    showToast("Foydalanuvchi o'chirildi", "success");
+    try {
+      await deleteUser.mutateAsync(deleteCandidate.id);
+      setDeleteCandidate(null);
+      showToast("Foydalanuvchi o'chirildi", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Foydalanuvchi o'chirilmadi", "error");
+    }
   };
 
-  const handleResetPassword = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const password = String(formData.get("newPassword") || "");
-    if (password.length < 6) {
-      showToast("Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak", "error");
-      return;
+  const handleResetPassword = () => {
+    if (!selectedUser) return;
+    void submitResetPassword(selectedUser);
+  };
+
+  const submitResetPassword = async (user: User) => {
+    try {
+      const result = await resetUserPassword.mutateAsync(user.id);
+      setResetPassword(result.password);
+      await copyPassword(result.password, false);
+      showToast("Parol qayta o'rnatildi", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Parol qayta o'rnatilmadi", "error");
     }
-    setIsResetDialogOpen(false);
-    setSelectedUser(null);
-    showToast("Parol qayta o'rnatildi", "success");
+  };
+
+  const copyPassword = async (password: string, notify = true) => {
+    try {
+      await navigator.clipboard.writeText(password);
+      if (notify) {
+        showToast("Parol nusxalandi", "success");
+      }
+    } catch {
+      if (notify) {
+        showToast("Parolni nusxalab bo'lmadi", "error");
+      }
+    }
   };
 
   const openEditDialog = (user: User) => {
@@ -318,6 +400,11 @@ export function FoydalanuvchilarPage() {
     setEditRole(user.role);
     setIsEditDialogOpen(true);
   };
+
+  /*
+    The legacy mock context still powers other pages. Admin users below are
+    intentionally read from /api/admin/users and not mirrored into mock state.
+  */
 
   return (
     <div className="space-y-6">
@@ -329,7 +416,7 @@ export function FoydalanuvchilarPage() {
           </p>
         </div>
         {canManageUsers && (
-          <Button onClick={() => setIsAddDialogOpen(true)}>
+          <Button onClick={() => setIsAddDialogOpen(true)} disabled={isMutating}>
             <Plus className="mr-2 h-4 w-4" />
             Yangi foydalanuvchi
           </Button>
@@ -444,9 +531,9 @@ export function FoydalanuvchilarPage() {
       </Card>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="max-h-[520px] overflow-y-auto p-0">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow>
                 <TableHead>Foydalanuvchi</TableHead>
                 <TableHead>Rol</TableHead>
@@ -457,7 +544,25 @@ export function FoydalanuvchilarPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredUsers.length === 0 ? (
+              {usersQuery.isLoading ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    Foydalanuvchilar yuklanmoqda...
+                  </TableCell>
+                </TableRow>
+              ) : usersQuery.isError ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="py-8 text-center text-destructive"
+                  >
+                    Foydalanuvchilarni yuklab bo'lmadi
+                  </TableCell>
+                </TableRow>
+              ) : filteredUsers.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={6}
@@ -495,7 +600,7 @@ export function FoydalanuvchilarPage() {
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
-                    <TableCell>{formatDate(user.lastLogin)}</TableCell>
+                    <TableCell>{formatDate(user.lastLoginAt ?? undefined)}</TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"
@@ -536,6 +641,7 @@ export function FoydalanuvchilarPage() {
                               <DropdownMenuItem
                                 onClick={() => {
                                   setSelectedUser(user);
+                                  setResetPassword(null);
                                   setIsResetDialogOpen(true);
                                 }}
                               >
@@ -587,7 +693,9 @@ export function FoydalanuvchilarPage() {
               >
                 Bekor qilish
               </Button>
-              <Button type="submit">Qo'shish</Button>
+              <Button type="submit" disabled={createUser.isPending}>
+                Qo'shish
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -618,7 +726,7 @@ export function FoydalanuvchilarPage() {
                 <InfoRow label="Telefon" value={selectedUser.phone || "-"} />
                 <InfoRow label="Tuman" value={selectedUser.districtId || "-"} />
                 <InfoRow label="Holat" value={userStatus(selectedUser) === "active" ? "Faol" : "Nofaol"} />
-                <InfoRow label="Oxirgi kirish" value={formatDate(selectedUser.lastLogin)} />
+                <InfoRow label="Oxirgi kirish" value={formatDate(selectedUser.lastLoginAt ?? undefined)} />
                 <InfoRow label="Qo'shilgan sana" value={formatDate(selectedUser.createdAt)} />
               </div>
             </div>
@@ -637,6 +745,7 @@ export function FoydalanuvchilarPage() {
                 user={selectedUser}
                 role={editRole}
                 onRoleChange={setEditRole}
+                readOnlyIdentity
               />
               <DialogFooter>
                 <Button
@@ -646,7 +755,9 @@ export function FoydalanuvchilarPage() {
                 >
                   Bekor qilish
                 </Button>
-                <Button type="submit">Saqlash</Button>
+                <Button type="submit" disabled={updateUser.isPending}>
+                  Saqlash
+                </Button>
               </DialogFooter>
             </form>
           )}
@@ -661,11 +772,30 @@ export function FoydalanuvchilarPage() {
               {selectedUser?.fullName} uchun yangi parol kiriting.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleResetPassword} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="newPassword">Yangi parol</Label>
-              <Input id="newPassword" name="newPassword" type="password" required />
-            </div>
+          <div className="space-y-4">
+            {resetPassword ? (
+              <div className="rounded-md border bg-muted/40 p-3">
+                <p className="text-sm text-muted-foreground">Yangi parol</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="min-w-0 flex-1 break-all font-mono text-base font-semibold">
+                    {resetPassword}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => void copyPassword(resetPassword)}
+                    aria-label="Parolni nusxalash"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Backend yangi vaqtinchalik parol yaratadi.
+              </p>
+            )}
             <DialogFooter>
               <Button
                 type="button"
@@ -674,9 +804,15 @@ export function FoydalanuvchilarPage() {
               >
                 Bekor qilish
               </Button>
-              <Button type="submit">Reset</Button>
+              <Button
+                type="button"
+                onClick={handleResetPassword}
+                disabled={resetUserPassword.isPending}
+              >
+                Reset
+              </Button>
             </DialogFooter>
-          </form>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -696,6 +832,7 @@ export function FoydalanuvchilarPage() {
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDeleteUser}
+              disabled={deleteUser.isPending}
             >
               O'chirish
             </AlertDialogAction>
@@ -711,13 +848,16 @@ function UserForm({
   role,
   onRoleChange,
   requirePassword = false,
+  readOnlyIdentity = false,
 }: {
   user?: User;
   role: UserRole;
   onRoleChange: (role: UserRole) => void;
   requirePassword?: boolean;
+  readOnlyIdentity?: boolean;
 }) {
   const needsDistrict = scopedRoles.includes(role);
+  const [showPassword, setShowPassword] = useState(false);
 
   return (
     <div className="grid gap-4 py-4">
@@ -740,12 +880,36 @@ function UserForm({
           required
           defaultValue={user?.email}
           placeholder="email@example.com"
+          disabled={readOnlyIdentity}
         />
       </div>
       {requirePassword && (
         <div className="grid gap-2">
           <Label htmlFor="password">Parol</Label>
-          <Input id="password" name="password" type="password" required />
+          <div className="relative">
+            <Input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              required
+              defaultValue={defaultPassword}
+              className="pr-10"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
+              onClick={() => setShowPassword((current) => !current)}
+              aria-label={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
+            >
+              {showPassword ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
       )}
       <div className="grid gap-2">
@@ -754,35 +918,42 @@ function UserForm({
           id="phone"
           name="phone"
           type="tel"
-          defaultValue={user?.phone}
+          defaultValue={user?.phone ?? undefined}
           placeholder="+998 XX XXX XX XX"
         />
       </div>
-      <div className="grid gap-2">
-        <Label htmlFor="role">Rol</Label>
-        <Select
-          name="role"
-          value={role}
-          onValueChange={(value) => onRoleChange(value as UserRole)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Rolni tanlang" />
-          </SelectTrigger>
-          <SelectContent>
-            {allRoles.map((item) => (
-              <SelectItem key={item} value={item}>
-                {roleLabels[item]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      {needsDistrict && (
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor="role">Rol</Label>
+          <Select
+            name="role"
+            value={role}
+            onValueChange={(value) => onRoleChange(value as UserRole)}
+            disabled={readOnlyIdentity}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Rolni tanlang" />
+            </SelectTrigger>
+            <SelectContent>
+              {allRoles.map((item) => (
+                <SelectItem key={item} value={item}>
+                  {roleLabels[item]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="grid gap-2">
           <Label htmlFor="districtId">Tuman</Label>
-          <Select name="districtId" defaultValue={user?.districtId}>
+          <Select
+            name="districtId"
+            defaultValue={user?.districtId ?? undefined}
+            disabled={readOnlyIdentity || !needsDistrict}
+          >
             <SelectTrigger>
-              <SelectValue placeholder="Tumanni tanlang" />
+              <SelectValue
+                placeholder={needsDistrict ? "Tumanni tanlang" : "Tuman kerak emas"}
+              />
             </SelectTrigger>
             <SelectContent>
               {TOSHKENT_VILOYATI_DISTRICTS.map((district) => (
@@ -793,7 +964,7 @@ function UserForm({
             </SelectContent>
           </Select>
         </div>
-      )}
+      </div>
     </div>
   );
 }

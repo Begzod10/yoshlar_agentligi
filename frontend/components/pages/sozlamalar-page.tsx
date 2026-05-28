@@ -4,6 +4,17 @@ import React from "react"
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
+import {
+  downloadAdminReport,
+  useAdminAuditLog,
+  useAdminBackups,
+  useAdminSystemInfo,
+  useAdminTableCounts,
+  useCreateBackup,
+  useRestoreBackup,
+  useToggleMaintenance,
+} from "@/lib/api/hooks/use-admin";
+import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +62,13 @@ const roleLabels = {
 export function SozlamalarPage() {
   const { currentUser, showToast } = useApp();
   const isAdmin = currentUser?.role === "admin";
+  const auditLog = useAdminAuditLog({ limit: 10, enabled: isAdmin });
+  const systemInfo = useAdminSystemInfo(isAdmin);
+  const tableCounts = useAdminTableCounts(isAdmin);
+  const backups = useAdminBackups(isAdmin);
+  const toggleMaintenance = useToggleMaintenance();
+  const createBackup = useCreateBackup();
+  const restoreBackup = useRestoreBackup();
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [notifications, setNotifications] = useState({
@@ -65,6 +83,8 @@ export function SozlamalarPage() {
   });
   const [theme, setTheme] = useState("system");
   const [language, setLanguage] = useState("uz");
+  const [maintenanceMessage, setMaintenanceMessage] = useState("");
+  const [reportDistrict, setReportDistrict] = useState("Bekobod tumani");
 
   const handleSaveProfile = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -78,6 +98,63 @@ export function SozlamalarPage() {
 
   const handleSaveNotifications = () => {
     showToast("Bildirishnoma sozlamalari saqlandi", "success");
+  };
+
+  const formatDate = (date: string) =>
+    new Intl.DateTimeFormat("uz-UZ", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(date));
+
+  const formatBytes = (value: number) => {
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
+    return `${Math.round(value / 1024 / 1024)} MB`;
+  };
+
+  const handleToggleMaintenance = async (enabled: boolean) => {
+    try {
+      await toggleMaintenance.mutateAsync({
+        enabled,
+        message: maintenanceMessage || null,
+      });
+      showToast("Maintenance holati yangilandi", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Maintenance yangilanmadi", "error");
+    }
+  };
+
+  const handleCreateBackup = async () => {
+    try {
+      await createBackup.mutateAsync();
+      showToast("Backup yaratildi", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Backup yaratilmadi", "error");
+    }
+  };
+
+  const handleRestoreBackup = async (backupId: string) => {
+    try {
+      await restoreBackup.mutateAsync(backupId);
+      showToast("Backup restore qilindi", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Restore bajarilmadi", "error");
+    }
+  };
+
+  const handleDownloadReport = async (kind: "agency" | "district") => {
+    try {
+      await downloadAdminReport(kind, {
+        districtId: kind === "district" ? reportDistrict : undefined,
+        includePii: true,
+      });
+      showToast("Hisobot yuklab olindi", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Hisobot yuklanmadi", "error");
+    }
   };
 
   return (
@@ -566,44 +643,34 @@ export function SozlamalarPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {[
-                    {
-                      action: "user.create",
-                      actor: "Abdullayev Sardor",
-                      entity: "Foydalanuvchi",
-                      time: "Bugun, 09:30",
-                    },
-                    {
-                      action: "user.reset_password",
-                      actor: "Abdullayev Sardor",
-                      entity: "Mas'ul hodim",
-                      time: "Kecha, 17:15",
-                    },
-                    {
-                      action: "district.override",
-                      actor: "Abdullayev Sardor",
-                      entity: "Yosh biriktirish",
-                      time: "24 May, 11:05",
-                    },
-                  ].map((row) => (
+                  {auditLog.isLoading && (
+                    <p className="text-sm text-muted-foreground">Audit log yuklanmoqda...</p>
+                  )}
+                  {auditLog.isError && (
+                    <p className="text-sm text-destructive">Audit log yuklanmadi</p>
+                  )}
+                  {auditLog.data?.data.map((row) => (
                     <div
-                      key={`${row.action}-${row.time}`}
+                      key={row.id}
                       className="grid gap-3 rounded-md border p-4 md:grid-cols-[180px_1fr_180px]"
                     >
                       <Badge variant="outline" className="w-fit">
                         {row.action}
                       </Badge>
                       <div>
-                        <p className="font-medium">{row.entity}</p>
+                        <p className="font-medium">{row.entityType}</p>
                         <p className="text-sm text-muted-foreground">
-                          Actor: {row.actor}
+                          Actor: {row.userId}
                         </p>
                       </div>
                       <p className="text-sm text-muted-foreground md:text-right">
-                        {row.time}
+                        {formatDate(row.createdAt)}
                       </p>
                     </div>
                   ))}
+                  {auditLog.data?.data.length === 0 && (
+                    <p className="text-sm text-muted-foreground">Audit yozuvlari topilmadi</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -627,28 +694,80 @@ export function SozlamalarPage() {
                       Foydalanuvchilar uchun tizimga kirishni vaqtincha cheklash
                     </p>
                   </div>
-                  <Switch />
+                  <Switch
+                    checked={systemInfo.data?.maintenanceMode ?? false}
+                    onCheckedChange={handleToggleMaintenance}
+                    disabled={toggleMaintenance.isPending || systemInfo.isLoading}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="maintenanceMessage">Maintenance xabari</Label>
+                  <Input
+                    id="maintenanceMessage"
+                    value={maintenanceMessage}
+                    onChange={(event) => setMaintenanceMessage(event.target.value)}
+                    placeholder={systemInfo.data?.maintenanceMessage ?? "Tizim yangilanmoqda"}
+                  />
                 </div>
                 <Separator />
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-3">
                   <div className="rounded-md border p-4">
-                    <p className="font-medium">Tumanlar ro'yxati</p>
+                    <p className="font-medium">Backend</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      14 ta Toshkent viloyati tumani. v1 uchun read-only.
+                      {systemInfo.data?.appName ?? "Yuklanmoqda"}
                     </p>
-                    <Button variant="outline" size="sm" className="mt-4 bg-transparent" disabled>
-                      Tahrirlash
-                    </Button>
+                    <Badge variant="outline" className="mt-3">
+                      {systemInfo.data?.appEnv ?? "-"} · {systemInfo.data?.version ?? "0.1.0"}
+                    </Badge>
                   </div>
                   <div className="rounded-md border p-4">
-                    <p className="font-medium">Role permission matrix</p>
+                    <p className="font-medium">Jadval countlari</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Rollar va sahifa huquqlari. v1 uchun read-only.
+                      Users: {tableCounts.data?.users ?? "-"} · Youth: {tableCounts.data?.youth ?? "-"}
                     </p>
-                    <Button variant="outline" size="sm" className="mt-4 bg-transparent" disabled>
-                      Tahrirlash
-                    </Button>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Plans: {tableCounts.data?.plans ?? "-"} · Meetings: {tableCounts.data?.meetings ?? "-"}
+                    </p>
                   </div>
+                  <div className="rounded-md border p-4">
+                    <p className="font-medium">Admin reports</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      PII-enabled CSV eksportlar
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-transparent"
+                        onClick={() => void handleDownloadReport("agency")}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Agency CSV
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-[260px_1fr]">
+                  <Select value={reportDistrict} onValueChange={setReportDistrict}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tuman" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TOSHKENT_VILOYATI_DISTRICTS.map((district) => (
+                        <SelectItem key={district} value={district}>
+                          {district}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    className="justify-start bg-transparent"
+                    onClick={() => void handleDownloadReport("district")}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    District CSV yuklab olish
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -659,25 +778,35 @@ export function SozlamalarPage() {
           <TabsContent value="backups" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Backups</CardTitle>
-                <CardDescription>
-                  Zaxira nusxalarni ko'rish, yuklab olish va tiklash
-                </CardDescription>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <CardTitle className="text-lg">Backups</CardTitle>
+                    <CardDescription>
+                      Zaxira nusxalarni ko'rish, yaratish va tiklash
+                    </CardDescription>
+                  </div>
+                  <Button onClick={handleCreateBackup} disabled={createBackup.isPending}>
+                    <Database className="mr-2 h-4 w-4" />
+                    Backup yaratish
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                {[
-                  { name: "daily-2026-05-28.sql", size: "48 MB", status: "Tayyor" },
-                  { name: "daily-2026-05-27.sql", size: "47 MB", status: "Tayyor" },
-                  { name: "weekly-2026-05-24.sql", size: "286 MB", status: "Arxiv" },
-                ].map((backup) => (
+                {backups.isLoading && (
+                  <p className="text-sm text-muted-foreground">Backuplar yuklanmoqda...</p>
+                )}
+                {backups.isError && (
+                  <p className="text-sm text-destructive">Backuplarni yuklab bo'lmadi</p>
+                )}
+                {backups.data?.map((backup) => (
                   <div
-                    key={backup.name}
+                    key={backup.id}
                     className="flex flex-col gap-3 rounded-md border p-4 md:flex-row md:items-center md:justify-between"
                   >
                     <div>
-                      <p className="font-medium">{backup.name}</p>
+                      <p className="font-medium">{backup.label}</p>
                       <p className="text-sm text-muted-foreground">
-                        {backup.size} · {backup.status}
+                        {formatBytes(backup.sizeBytes)} · {formatDate(backup.createdAt)}
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -685,16 +814,8 @@ export function SozlamalarPage() {
                         variant="outline"
                         size="sm"
                         className="bg-transparent"
-                        onClick={() => showToast("Backup yuklab olish UI tayyor", "info")}
-                      >
-                        <Download className="mr-2 h-4 w-4" />
-                        Yuklab olish
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="bg-transparent"
-                        onClick={() => showToast("Restore backend ulanganda ishlaydi", "info")}
+                        onClick={() => void handleRestoreBackup(backup.id)}
+                        disabled={restoreBackup.isPending}
                       >
                         <RotateCcw className="mr-2 h-4 w-4" />
                         Restore
@@ -702,6 +823,9 @@ export function SozlamalarPage() {
                     </div>
                   </div>
                 ))}
+                {backups.data?.length === 0 && (
+                  <p className="text-sm text-muted-foreground">Backup topilmadi</p>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

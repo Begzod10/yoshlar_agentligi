@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { downloadReport } from "@/lib/api/hooks/use-core-api";
 import { TOSHKENT_VILOYATI_DISTRICTS, type ToshkentDistrict } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -222,7 +223,17 @@ export function MonitoringPage() {
               <SelectItem value="year">So'nggi yil</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" className="bg-transparent">
+          <Button
+            variant="outline"
+            className="bg-transparent"
+            onClick={() => {
+              if (selectedDistrict === "all") {
+                void downloadReport.agency();
+              } else {
+                void downloadReport.district(selectedDistrict);
+              }
+            }}
+          >
             <Download className="h-4 w-4 mr-2" />
             Hisobot
           </Button>
