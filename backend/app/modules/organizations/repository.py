@@ -38,3 +38,11 @@ class OrganizationsRepository:
         stmt = base.order_by(Organization.name).offset(offset).limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all()), total
+
+    async def add(self, org: Organization) -> Organization:
+        self._session.add(org)
+        await self._session.flush()
+        return org
+
+    async def delete(self, org: Organization) -> None:
+        await self._session.delete(org)

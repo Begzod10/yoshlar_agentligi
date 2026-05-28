@@ -15,6 +15,10 @@ from app.modules.organizations.router import router as organizations_router
 from app.modules.stats.router import router as stats_router
 from app.modules.audit.router import router as audit_router
 from app.modules.reports.router import router as reports_router
+from app.modules.youth.router import router as youth_router
+from app.modules.masullar.router import router as masullar_router
+from app.modules.plans.router import router as plans_router
+from app.modules.meetings.router import router as meetings_router
 
 log = get_logger(__name__)
 
@@ -56,6 +60,10 @@ def create_app() -> FastAPI:
     app.include_router(stats_router)
     app.include_router(audit_router)
     app.include_router(reports_router)
+    app.include_router(youth_router)
+    app.include_router(masullar_router)
+    app.include_router(plans_router)
+    app.include_router(meetings_router)
 
     @app.get("/healthz", tags=["meta"])
     async def healthz() -> dict[str, str]:
