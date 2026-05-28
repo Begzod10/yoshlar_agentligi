@@ -63,7 +63,7 @@ services:
       - JWT_ALGORITHM=HS256
       - JWT_ACCESS_TTL_MIN=30
       - JWT_REFRESH_TTL_DAYS=14
-      - CORS_ORIGINS=https://agency.gennis.uz
+      - CORS_ORIGINS=https://agency.gennis.uz,http://localhost:3000,http://localhost:3001
       - LOG_LEVEL=INFO
     ports:
       - "8001:8000"
