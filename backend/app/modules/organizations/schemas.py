@@ -18,6 +18,23 @@ class OrganizationRead(BaseModel):
     updated_at: datetime
 
 
+class OrganizationCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=255)
+    district_id: str = Field(min_length=1, max_length=64)
+    type: str | None = Field(default=None, max_length=64)
+    contact_phone: str | None = Field(default=None, max_length=32)
+    address: str | None = Field(default=None, max_length=500)
+    director_name: str = Field(min_length=2, max_length=255)
+
+
+class OrganizationUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=255)
+    type: str | None = Field(default=None, max_length=64)
+    contact_phone: str | None = Field(default=None, max_length=32)
+    address: str | None = Field(default=None, max_length=500)
+    director_name: str | None = Field(default=None, min_length=2, max_length=255)
+
+
 class OrganizationListParams(BaseModel):
     district_id: str | None = None
     search: str | None = None
