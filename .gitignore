@@ -1,0 +1,59 @@
+# Tool working directories
+.claude/
+.playwright-mcp/
+.cursor/
+.aider*
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Env files (keep *.example)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Node / Next.js (frontend/)
+node_modules/
+.next/
+out/
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+
+# JS logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# Python (backend/)
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Build outputs
+build/
+dist/
+
+# Local databases
+*.db
+*.sqlite3
+
+# Local docker volumes (if mounted as bind mounts)
+.docker-data/
