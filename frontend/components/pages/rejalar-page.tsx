@@ -4,6 +4,7 @@ import React from "react"
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { usePlans } from "@/lib/api/hooks/use-core-api";
 import type { IndividualPlan } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,6 +73,9 @@ export function RejalarPage() {
     selectedDistrict,
     showToast,
   } = useApp();
+
+  // Fire GET /api/plans on mount
+  usePlans({ page: 1, limit: 100 });
 
   const isAdmin = currentUser?.role === "admin";
   const isDirektor = currentUser?.role === "direktor";

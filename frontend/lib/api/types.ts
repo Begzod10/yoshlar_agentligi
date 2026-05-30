@@ -69,6 +69,8 @@ export interface DistrictRead {
   name: string;
 }
 
+// Backend returns snake_case; client.ts auto-converts to camelCase.
+// director_name → directorName, contact_phone → contactPhone, etc.
 export interface OrganizationRead {
   id: string;
   name: string;
@@ -76,14 +78,15 @@ export interface OrganizationRead {
   type: string | null;
   contactPhone: string | null;
   address: string | null;
-  headName: string | null;
+  directorName: string;
   createdAt: string;
+  updatedAt: string;
 }
 
-export type OrganizationCreate = Pick<OrganizationRead, "name" | "districtId"> &
-  Partial<Pick<OrganizationRead, "type" | "contactPhone" | "address" | "headName">>;
+export type OrganizationCreate = Pick<OrganizationRead, "name" | "districtId" | "directorName"> &
+  Partial<Pick<OrganizationRead, "type" | "contactPhone" | "address">>;
 
-export type OrganizationUpdate = Partial<OrganizationCreate>;
+export type OrganizationUpdate = Partial<Omit<OrganizationCreate, "districtId">>;
 
 export interface MasulRead {
   id: string;

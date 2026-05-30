@@ -4,6 +4,7 @@ import React from "react"
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { useMasullar } from "@/lib/api/hooks/use-core-api";
 import type { Masul, ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -72,6 +73,9 @@ export function MasullarPage() {
     selectedDistrict,
     showToast,
   } = useApp();
+
+  // Fire GET /api/masullar on mount
+  useMasullar({ page: 1, limit: 100 });
 
   const isAdmin = currentUser?.role === "admin";
   const isDirektor = currentUser?.role === "direktor";

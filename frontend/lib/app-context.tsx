@@ -182,7 +182,7 @@ function organizationToApp(org: OrganizationRead): Organization {
     districtId: asDistrict(org.districtId),
     address: org.address ?? "",
     directorId: "",
-    directorName: org.headName ?? "",
+    directorName: org.directorName ?? "",
     masullarCount: 0,
     yoshlarCount: 0,
     createdAt: org.createdAt,
@@ -278,11 +278,11 @@ function meetingToApp(meeting: MeetingRead, youth: Youth[], masullar: Masul[]): 
 export function AppProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const sessionUser = useCurrentUser();
-  const organizationsQuery = useOrganizations({ limit: 200, enabled: Boolean(sessionUser) });
-  const masullarQuery = useMasullar({ limit: 200, enabled: Boolean(sessionUser) });
-  const youthQuery = useYouthList({ limit: 200, enabled: Boolean(sessionUser) });
-  const plansQuery = usePlans({ limit: 200, enabled: Boolean(sessionUser) });
-  const meetingsQuery = useMeetings({ limit: 200, enabled: Boolean(sessionUser) });
+  const organizationsQuery = useOrganizations({ limit: 100, enabled: Boolean(sessionUser) });
+  const masullarQuery = useMasullar({ limit: 100, enabled: Boolean(sessionUser) });
+  const youthQuery = useYouthList({ limit: 100, enabled: Boolean(sessionUser) });
+  const plansQuery = usePlans({ limit: 100, enabled: Boolean(sessionUser) });
+  const meetingsQuery = useMeetings({ limit: 100, enabled: Boolean(sessionUser) });
 
   // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -535,7 +535,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           name: org.name,
           districtId: org.districtId,
           address: org.address || null,
-          headName: org.directorName || null,
+          directorName: org.directorName || null,
         })
         .then(() => queryClient.invalidateQueries({ queryKey: ["organizations"] }))
         .catch(() =>
@@ -578,9 +578,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       void api
         .patch<OrganizationRead>(`/api/organizations/${id}`, {
           name: data.name,
-          districtId: data.districtId,
           address: data.address,
-          headName: data.directorName,
+          directorName: data.directorName,
         })
         .then(() => queryClient.invalidateQueries({ queryKey: ["organizations"] }))
         .catch(() =>

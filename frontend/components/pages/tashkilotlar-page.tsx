@@ -4,6 +4,7 @@ import React from "react"
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { useOrganizations } from "@/lib/api/hooks/use-core-api";
 import type { Organization, ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,6 +69,9 @@ export function TashkilotlarPage() {
     showToast,
   } = useApp();
 
+  // Fire GET /api/organizations on mount
+  useOrganizations({ page: 1, limit: 100 });
+
   const isAdmin = currentUser?.role === "admin";
   const isDirektor = currentUser?.role === "direktor";
   const isTashkilotDirektor = currentUser?.role === "tashkilot_direktori";
@@ -84,15 +88,15 @@ export function TashkilotlarPage() {
   // Filter organizations based on role and selection
   let filteredOrganizations = organizations.filter((org) => {
     // Role-based filtering
-    if (isTashkilotDirektor && currentUser?.districtId) {
-      if (org.districtId !== currentUser.districtId) return false;
-    }
-
-    // Global district filter
-    if (selectedDistrict && org.districtId !== selectedDistrict) return false;
-
-    // Local district filter
-    if (districtFilter !== "all" && org.districtId !== districtFilter) return false;
+    // if (isTashkilotDirektor && currentUser?.districtId) {
+    //   if (org.districtId !== currentUser.districtId) return false;
+    // }
+    //
+    // // Global district filter
+    // if (selectedDistrict && org.districtId !== selectedDistrict) return false;
+    //
+    // // Local district filter
+    // if (districtFilter !== "all" && org.districtId !== districtFilter) return false;
 
     // Search filter
     const matchesSearch =
@@ -102,6 +106,7 @@ export function TashkilotlarPage() {
 
     return matchesSearch;
   });
+    console.log(organizations, 'user')
 
   // Get available districts for filter
   const availableDistricts = isTashkilotDirektor && currentUser?.districtId

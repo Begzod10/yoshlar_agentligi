@@ -4,6 +4,7 @@ import React from "react";
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { useYouthList } from "@/lib/api/hooks/use-core-api";
 import {
   useForceAssignMasul,
   useForceYouthStatus,
@@ -115,6 +116,9 @@ export function YoshlarPage() {
   const forceAssignMasul = useForceAssignMasul();
   const forceYouthStatus = useForceYouthStatus();
   const restoreYouth = useRestoreYouth();
+
+  // Fire GET /api/youth on mount
+  useYouthList({ page: 1, limit: 100 });
 
   const visibleYouth = getVisibleYouth();
   const visibleMasullar = getVisibleMasullar();

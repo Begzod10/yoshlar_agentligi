@@ -16,9 +16,7 @@ export function useOrganizationsList(params: OrgsListParams = {}) {
   return useQuery({
     queryKey: qk.organizations.list(params),
     queryFn: () =>
-      api.get<Page<OrganizationRead>>("/api/organizations", {
-        query: params as Record<string, string | number | undefined>,
-      }),
+      api.get<Page<OrganizationRead>>("/api/organizations"),
     placeholderData: keepPreviousData,
   });
 }

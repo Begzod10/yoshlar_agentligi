@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { useYouthList } from "@/lib/api/hooks/use-core-api";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,9 @@ export function ChiqarilganPage() {
     youth,
     selectedDistrict,
   } = useApp();
+
+  // Fire GET /api/youth?status=graduated on mount
+  useYouthList({ status: "graduated", page: 1, limit: 100 });
 
   const isTashkilotDirektor = currentUser?.role === "tashkilot_direktori";
 
