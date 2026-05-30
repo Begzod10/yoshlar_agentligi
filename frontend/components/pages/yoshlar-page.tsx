@@ -260,11 +260,12 @@ export function YoshlarPage() {
           <h1 className="text-2xl font-semibold text-foreground">Yoshlar ro'yxati</h1>
           <p className="text-muted-foreground">
             {isMasul
-              ? "Sizga biriktirilgan yoshlar"
+              ? `Sizga biriktirilgan yoshlar — ${filteredYouth.length} ta`
               : `Jami ${filteredYouth.length} ta yosh`}
           </p>
         </div>
-        {canEdit && (
+        {/* masul_hodim cannot add youth */}
+        {canEdit && !isMasul && (
           <Button onClick={() => setIsAddDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Yosh qo'shish
@@ -432,7 +433,8 @@ export function YoshlarPage() {
                             <Brain className="h-4 w-4 mr-2" />
                             AI Tahlil
                           </DropdownMenuItem>
-                          {canEdit && (
+                          {/* Edit / Assign / Remove — hidden for masul_hodim */}
+                          {canEdit && !isMasul && (
                             <DropdownMenuItem
                               onClick={() => {
                                 setSelectedYouth(youth);
@@ -443,7 +445,7 @@ export function YoshlarPage() {
                               Tahrirlash
                             </DropdownMenuItem>
                           )}
-                          {canAssign && !youth.assignedMasulId && (
+                          {canAssign && !isMasul && !youth.assignedMasulId && (
                             <DropdownMenuItem
                               onClick={() => {
                                 setSelectedYouth(youth);
@@ -454,7 +456,7 @@ export function YoshlarPage() {
                               Biriktirish
                             </DropdownMenuItem>
                           )}
-                          {canEdit && youth.status === "active" && (
+                          {canEdit && !isMasul && youth.status === "active" && (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
@@ -638,6 +640,29 @@ export function YoshlarPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Inline notes — masul_hodim only; autosaves on blur */}
+                {isMasul && (
+                  <div className="space-y-2 pt-4 border-t">
+                    <Label htmlFor="youth-notes" className="flex items-center gap-1.5">
+                      <Activity className="h-3.5 w-3.5" />
+                      Mas'ul eslatmalar
+                      <span className="text-xs text-muted-foreground font-normal ml-1">(blur saqlaydi)</span>
+                    </Label>
+                    <Textarea
+                      id="youth-notes"
+                      defaultValue={selectedYouth.notes || ""}
+                      placeholder="Bu yosh haqida shaxsiy eslatmalar..."
+                      rows={4}
+                      onBlur={(e) => {
+                        const val = e.target.value;
+                        if (val !== selectedYouth.notes) {
+                          updateYouth(selectedYouth.id, { notes: val });
+                        }
+                      }}
+                    />
+                  </div>
+                )}
               </TabsContent>
               <TabsContent value="plans" className="mt-4">
                 <div className="text-center py-8 text-muted-foreground">

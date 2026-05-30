@@ -240,6 +240,7 @@ export function AIChat({ context, className }: AIChatProps) {
                               {part.toolInvocation.state === "output-available" && (
                                 <pre className="mt-1 text-xs bg-background/50 p-2 rounded overflow-auto max-h-32">
                                   {JSON.stringify(
+                                      //@ts-ignore
                                     part.toolInvocation.output,
                                     null,
                                     2

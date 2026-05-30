@@ -1,5 +1,6 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
+import { mockYouth } from "@/lib/mock-data";
 
 export const maxDuration = 30;
 
@@ -34,19 +35,63 @@ const planRecommendationSchema = z.object({
   expectedOutcomes: z.array(z.string()).describe("Kutilayotgan natijalar"),
 });
 
+// ─── Ownership guard ─────────────────────────────────────────────────────────
+// Verifies that the caller (userId) is the assigned masul for the youth.
+// For non-masul roles (admin / direktor) we skip the check (userId not sent).
+function checkYouthOwnership(youthId: string, userId?: string): {
+  youth: (typeof mockYouth)[0] | null;
+  forbidden: boolean;
+} {
+  const youth = mockYouth.find((y) => y.id === youthId) ?? null;
+  if (!youth) return { youth: null, forbidden: false };
+  if (!userId) return { youth, forbidden: false }; // admin / direktor — no check
+  const forbidden = youth.assignedMasulId !== userId;
+  return { youth, forbidden };
+}
+
 export async function POST(req: Request) {
-  const { type, data } = await req.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: "Noto'g'ri JSON" }, { status: 400 });
+  }
 
+  const { type, data, youthId, userId } = body as {
+    type: string;
+    data?: Record<string, unknown>;
+    youthId?: string;
+    userId?: string;
+  };
+
+  // ─── Youth Analysis ────────────────────────────────────────────────────────
   if (type === "youth-analysis") {
-    const { youth, meetings, plans } = data;
+    const targetYouthId = (youthId ?? (data as any)?.youth?.id) as string | undefined;
 
-    const { output } = await generateText({
-      model: "openai/gpt-4o",
-      output: Output.object({ schema: youthAnalysisSchema }),
-      messages: [
-        {
-          role: "user",
-          content: `O'zbekiston Yoshlar agentligi uchun quyidagi yoshning holatini tahlil qiling:
+    if (targetYouthId) {
+      const { youth: serverYouth, forbidden } = checkYouthOwnership(targetYouthId, userId);
+      if (forbidden) {
+        return Response.json(
+          { error: "forbidden", message: "Bu yosh sizga biriktirilmagan" },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Use server-side youth data (not client-passed PII)
+    const clientData = (data ?? {}) as any;
+    const meetings = clientData.meetings ?? [];
+    const plans = clientData.plans ?? [];
+    const youth = mockYouth.find((y) => y.id === targetYouthId) ?? clientData.youth;
+
+    try {
+      const { output } = await generateText({
+        model: "openai/gpt-4o",
+        output: Output.object({ schema: youthAnalysisSchema }),
+        messages: [
+          {
+            role: "user",
+            content: `O'zbekiston Yoshlar agentligi uchun quyidagi yoshning holatini tahlil qiling:
 
 Yosh ma'lumotlari:
 - Ism: ${youth.fullName}
@@ -63,23 +108,57 @@ So'nggi uchrashuvlar:
 ${meetings?.slice(0, 3).map((m: any) => `- ${m.date}: ${m.notes}`).join("\n") || "Ma'lumot yo'q"}
 
 Iltimos, yoshning holatini batafsil tahlil qiling va tavsiyalar bering.`,
-        },
-      ],
-    });
+          },
+        ],
+      });
 
-    return Response.json({ analysis: output });
+      const parsed = youthAnalysisSchema.safeParse(output);
+      if (!parsed.success) {
+        return Response.json(
+          { error: "ai_schema_error", detail: parsed.error.flatten() },
+          { status: 502 }
+        );
+      }
+      return Response.json({ analysis: parsed.data });
+    } catch (err: any) {
+      console.error("[AI analyze] youth-analysis error:", err);
+      return Response.json({ error: "ai_error", message: err.message }, { status: 502 });
+    }
   }
 
+  // ─── Plan Recommendation ───────────────────────────────────────────────────
   if (type === "plan-recommendation") {
-    const { youth, existingPlans } = data;
+    const targetYouthId = (youthId ?? (data as any)?.youth?.id) as string | undefined;
 
-    const { output } = await generateText({
-      model: "openai/gpt-4o",
-      output: Output.object({ schema: planRecommendationSchema }),
-      messages: [
-        {
-          role: "user",
-          content: `O'zbekiston Yoshlar agentligi uchun quyidagi yosh uchun individual reja tavsiya qiling:
+    if (!targetYouthId) {
+      return Response.json({ error: "youthId majburiy" }, { status: 400 });
+    }
+
+    // Ownership check — masul_hodim sends userId
+    const { youth: serverYouth, forbidden } = checkYouthOwnership(targetYouthId, userId);
+    if (forbidden) {
+      return Response.json(
+        { error: "forbidden", message: "Bu yosh sizga biriktirilmagan" },
+        { status: 403 }
+      );
+    }
+
+    // Load from server; ignore client PII
+    const youth = serverYouth ?? (data as any)?.youth;
+    if (!youth) {
+      return Response.json({ error: "Yosh topilmadi" }, { status: 404 });
+    }
+
+    const existingPlans = ((data as any)?.existingPlans ?? []) as any[];
+
+    try {
+      const { output } = await generateText({
+        model: "openai/gpt-4o",
+        output: Output.object({ schema: planRecommendationSchema }),
+        messages: [
+          {
+            role: "user",
+            content: `O'zbekiston Yoshlar agentligi uchun quyidagi yosh uchun individual reja tavsiya qiling:
 
 Yosh ma'lumotlari:
 - Ism: ${youth.fullName}
@@ -95,13 +174,27 @@ ${youth.category === "Ta'lim olishda qiyinchiliklarga duch kelgan" ? "- Ta'lim k
 ${youth.category === "Huquqbuzarlik sodir etgan" ? "- Profilaktika ishlari va huquqiy ma'rifat kerak" : ""}
 ${youth.category === "Narkotik moddalardan foydalanuvchi" ? "- Tibbiy reabilitatsiya va psixologik yordam kerak" : ""}
 ${youth.category === "Ruhiy-psixologik muammolarga ega" ? "- Professional psixolog va terapiya kerak" : ""}
+${youth.category === "Ijtimoiy himoya" ? "- Ijtimoiy xizmatlar va yordam dasturlari kerak" : ""}
+${youth.category === "Ta'lim" ? "- O'quv rejasi, kasbiy yo'naltirish va mentorlik kerak" : ""}
+${youth.category === "Bandlik" ? "- Kasb-hunar o'qitish va ish joylari bilan bog'lash kerak" : ""}
 
 Iltimos, 3 oylik individual reja tavsiya qiling.`,
-        },
-      ],
-    });
+          },
+        ],
+      });
 
-    return Response.json({ plan: output });
+      const parsed = planRecommendationSchema.safeParse(output);
+      if (!parsed.success) {
+        return Response.json(
+          { error: "ai_schema_error", detail: parsed.error.flatten() },
+          { status: 502 }
+        );
+      }
+      return Response.json({ plan: parsed.data });
+    } catch (err: any) {
+      console.error("[AI analyze] plan-recommendation error:", err);
+      return Response.json({ error: "ai_error", message: err.message }, { status: 502 });
+    }
   }
 
   return Response.json({ error: "Noto'g'ri so'rov turi" }, { status: 400 });

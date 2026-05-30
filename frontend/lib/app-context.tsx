@@ -175,6 +175,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Reset district filter based on role
         if (user.role === "tashkilot_direktori" && user.districtId) {
           setSelectedDistrict(user.districtId);
+        } else if (user.role === "masul_hodim" && user.districtId) {
+          // Caseworker is locked to their own district
+          setSelectedDistrict(user.districtId);
         } else if (
           user.role === "admin" ||
           user.role === "direktor" ||
@@ -391,6 +394,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Youth CRUD
   const addYouth = useCallback(
     (youthData: Omit<Youth, "id" | "createdAt">) => {
+      // masul_hodim cannot add new youth
+      if (currentUser?.role === "masul_hodim") {
+        addToast({
+          title: "Ruxsat yo'q",
+          description: "Yangi yosh qo'shish huquqi yo'q",
+          type: "error",
+        });
+        throw new Error("masul_hodim cannot add youth");
+      }
+
       // Validate district is provided
       if (!youthData.districtId) {
         addToast({
@@ -426,22 +439,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       return newYouth;
     },
-    [addToast]
+    [currentUser, addToast]
   );
 
   const updateYouth = useCallback(
     (id: string, data: Partial<Youth>) => {
-      setYouth((prev) => prev.map((y) => (y.id === id ? { ...y, ...data } : y)));
+      // masul_hodim may only update notes and contact fields
+      const safeData: Partial<Youth> =
+        currentUser?.role === "masul_hodim"
+          ? { notes: data.notes, contact: data.contact }
+          : data;
+      setYouth((prev) => prev.map((y) => (y.id === id ? { ...y, ...safeData } : y)));
       addToast({
         title: "Ma'lumotlar yangilandi",
         type: "success",
       });
     },
-    [addToast]
+    [currentUser, addToast]
   );
 
   const assignYouthToMasul = useCallback(
     (youthId: string, masulId: string): boolean => {
+      // masul_hodim cannot reassign youth
+      if (currentUser?.role === "masul_hodim") {
+        addToast({
+          title: "Ruxsat yo'q",
+          description: "Yoshni qayta biriktirish huquqi yo'q",
+          type: "error",
+        });
+        return false;
+      }
+
       const youthToAssign = youth.find((y) => y.id === youthId);
       const masul = masullar.find((m) => m.id === masulId);
 
@@ -494,7 +522,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       return true;
     },
-    [youth, masullar, addToast]
+    [currentUser, youth, masullar, addToast]
   );
 
   const removeYouth = useCallback(
@@ -653,13 +681,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deletePlan = useCallback(
     (id: string) => {
+      if (currentUser?.role === "masul_hodim") {
+        addToast({
+          title: "Ruxsat yo'q",
+          description: "Rejani o'chirish huquqi yo'q",
+          type: "error",
+        });
+        return;
+      }
       setPlans((prev) => prev.filter((p) => p.id !== id));
       addToast({
         title: "Reja o'chirildi",
         type: "info",
       });
     },
-    [addToast]
+    [currentUser, addToast]
   );
 
   // Meeting CRUD
@@ -696,13 +732,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deleteMeeting = useCallback(
     (id: string) => {
+      if (currentUser?.role === "masul_hodim") {
+        addToast({
+          title: "Ruxsat yo'q",
+          description: "Uchrashuvni o'chirish huquqi yo'q",
+          type: "error",
+        });
+        return;
+      }
       setMeetings((prev) => prev.filter((m) => m.id !== id));
       addToast({
         title: "Uchrashuv o'chirildi",
         type: "info",
       });
     },
-    [addToast]
+    [currentUser, addToast]
   );
 
   // Completed Work

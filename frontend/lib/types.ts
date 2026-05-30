@@ -69,6 +69,9 @@ export interface Youth {
   createdAt: string;
   removalReason?: string;
   removalDate?: string;
+  // Caseworker notes (inline-edited by masul_hodim)
+  notes?: string;
+  contact?: string;
 }
 
 export interface Masul {
@@ -110,10 +113,15 @@ export interface Meeting {
   title: string;
   description: string;
   date: string;
+  time?: string;
   location: string;
+  type?: "individual" | "group" | "home_visit" | "online" | "in_person" | "phone";
+  agenda?: string;
   status: "scheduled" | "completed" | "cancelled";
+  attendanceStatus?: "attended" | "no_show" | "rescheduled";
   notes?: string;
   photos?: string[];
+  attachments?: string[];
   createdAt: string;
 }
 
