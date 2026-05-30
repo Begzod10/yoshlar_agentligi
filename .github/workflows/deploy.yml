@@ -1,0 +1,56 @@
+name: Deploy Yoshlar CRM (Docker)
+
+on:
+  push:
+    branches:
+      - master
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Executing Remote SSH Commands to Deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: '5.129.242.151'
+          username: 'root'
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          script_stop: true
+          script: |
+            echo "=== Starting Dockerized Deployment ==="
+            
+            # 1. Navigate to the project directory
+            PROJECT_DIR="/home/yoshlar_agentligi"
+            if [ ! -d "$PROJECT_DIR" ]; then
+              echo "Project directory does not exist. Creating..."
+              mkdir -p /home
+              cd /home
+              git clone https://github.com/${{ github.repository }}.git yoshlar_agentligi
+            fi
+            
+            cd "$PROJECT_DIR"
+            
+            # 2. Pull the latest code from GitHub
+            echo "Pulling latest code from git..."
+            git fetch --all
+            # Reset hard to match the remote branch and prevent merge conflicts
+            git reset --hard origin/${{ github.ref_name }}
+            
+            # 3. Build and launch services using Docker Compose
+            echo "Building and launching containers..."
+            docker compose up --build -d
+            
+            # 4. Clean up dangling images to free up server disk space
+            echo "Cleaning up old Docker image layers..."
+            docker image prune -f
+            
+            # 5. Verify service statuses
+            echo "Checking running containers..."
+            docker compose ps
+            
+            echo "=== Dockerized Deployment Completed Successfully! ==="
