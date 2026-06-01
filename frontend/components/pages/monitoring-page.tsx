@@ -61,11 +61,11 @@ import {
 } from "lucide-react";
 
 const COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
 ];
 
 export function MonitoringPage() {
@@ -332,23 +332,23 @@ export function MonitoringPage() {
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                       <XAxis
                         dataKey="name"
-                        tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                        tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
                         interval={0}
                         angle={-45}
                         textAnchor="end"
                         height={60}
                       />
-                      <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                      <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
+                          backgroundColor: "var(--card)",
+                          border: "1px solid var(--border)",
                           borderRadius: "8px",
                         }}
                       />
                       <Legend />
-                      <Bar dataKey="yoshlar" name="Yoshlar" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="bajarildi" name="Bajarilgan" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="yoshlar" name="Yoshlar" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="bajarildi" name="Bajarilgan" fill="var(--accent)" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -371,14 +371,14 @@ export function MonitoringPage() {
                       <PolarGrid className="stroke-border" />
                       <PolarAngleAxis
                         dataKey="subject"
-                        tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                        tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
                       />
                       <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10 }} />
                       <Radar
                         name="Ko'rsatkich"
                         dataKey="value"
-                        stroke="hsl(var(--primary))"
-                        fill="hsl(var(--primary))"
+                        stroke="var(--primary)"
+                        fill="var(--primary)"
                         fillOpacity={0.3}
                       />
                     </RadarChart>
@@ -500,18 +500,18 @@ export function MonitoringPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={trendData}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis dataKey="month" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
-                      <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                      <XAxis dataKey="month" tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
+                      <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
+                          backgroundColor: "var(--card)",
+                          border: "1px solid var(--border)",
                           borderRadius: "8px",
                         }}
                       />
                       <Legend />
-                      <Line type="monotone" dataKey="yoshlar" name="Yoshlar" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} />
-                      <Line type="monotone" dataKey="score" name="AI ball" stroke="hsl(var(--accent))" strokeWidth={2} dot={{ r: 4 }} />
+                      <Line type="monotone" dataKey="yoshlar" name="Yoshlar" stroke="var(--primary)" strokeWidth={2} dot={{ r: 4 }} />
+                      <Line type="monotone" dataKey="score" name="AI ball" stroke="var(--accent)" strokeWidth={2} dot={{ r: 4 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>

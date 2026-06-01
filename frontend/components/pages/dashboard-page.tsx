@@ -46,11 +46,11 @@ import {
 } from "recharts";
 
 const categoryColors = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
 ];
 
 export function DashboardPage() {
@@ -152,8 +152,8 @@ export function DashboardPage() {
 
   // Status data for pie chart
   const statusData = [
-    { name: "Faol", value: totalStats.activeYouth, color: "hsl(var(--chart-2))" },
-    { name: "Yakunlangan", value: totalStats.graduatedYouth, color: "hsl(var(--chart-1))" },
+    { name: "Faol", value: totalStats.activeYouth, color: "var(--chart-2)" },
+    { name: "Yakunlangan", value: totalStats.graduatedYouth, color: "var(--chart-1)" },
   ];
 
   // Monthly trend data
@@ -373,24 +373,24 @@ export function DashboardPage() {
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                   <XAxis
                     dataKey="name"
-                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                    tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
                     interval={0}
                     angle={-45}
                     textAnchor="end"
                     height={60}
                   />
-                  <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                  <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
+                      backgroundColor: "var(--card)",
+                      border: "1px solid var(--border)",
                       borderRadius: "8px",
                     }}
                   />
                   <Legend />
-                  <Bar dataKey="yoshlar" name="Yoshlar" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="bajarildi" name="Bajarilgan" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="masullar" name="Mas'ullar" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="yoshlar" name="Yoshlar" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="bajarildi" name="Bajarilgan" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="masullar" name="Mas'ullar" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -557,12 +557,12 @@ export function DashboardPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={monthlyData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="month" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
-                    <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                    <XAxis dataKey="month" tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
+                    <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
+                        backgroundColor: "var(--card)",
+                        border: "1px solid var(--border)",
                         borderRadius: "8px",
                       }}
                     />
@@ -571,7 +571,7 @@ export function DashboardPage() {
                       type="monotone"
                       dataKey="yoshlar"
                       name="Yoshlar"
-                      stroke="hsl(var(--primary))"
+                      stroke="var(--primary)"
                       strokeWidth={2}
                       dot={{ r: 4 }}
                     />
@@ -579,7 +579,7 @@ export function DashboardPage() {
                       type="monotone"
                       dataKey="rejalar"
                       name="Rejalar"
-                      stroke="hsl(var(--accent))"
+                      stroke="var(--accent)"
                       strokeWidth={2}
                       dot={{ r: 4 }}
                     />
@@ -587,7 +587,7 @@ export function DashboardPage() {
                       type="monotone"
                       dataKey="uchrashuvlar"
                       name="Uchrashuvlar"
-                      stroke="hsl(var(--chart-3))"
+                      stroke="var(--chart-3)"
                       strokeWidth={2}
                       dot={{ r: 4 }}
                     />
