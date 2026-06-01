@@ -42,8 +42,14 @@ async def list_masullar(
         district_id=effective_district, organization_id=organization_id,
         search=search, offset=offset, limit=limit,
     )
+    data = []
+    for row in rows:
+        m = MasulRead.model_validate(row["masul"])
+        m.organization_name = row["organization_name"]
+        m.assigned_youth_count = row["assigned_youth_count"]
+        data.append(m)
     return {
-        "data": [MasulRead.model_validate(m) for m in rows],
+        "data": data,
         "meta": {"total": total, "page": page, "limit": limit},
     }
 

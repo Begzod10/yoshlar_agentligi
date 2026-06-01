@@ -25,6 +25,8 @@ class MasulRead(BaseModel):
     full_name: str
     district_id: str
     organization_id: UUID
+    organization_name: str | None = None
+    assigned_youth_count: int = 0
     phone: str | None
     email: str | None
     created_at: datetime
