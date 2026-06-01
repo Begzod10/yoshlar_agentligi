@@ -117,7 +117,7 @@ export interface Meeting {
   date: string;
   time?: string;
   location: string;
-  type?: "individual" | "group" | "home_visit" | "online" | string ;
+  type?: "individual" | "group" | "home_visit" | "online" | string | null | undefined;
   status: "scheduled" | "completed" | "cancelled";
 
   notes?: string;
