@@ -16,6 +16,7 @@ import { LoginPage } from "@/components/pages/login-page";
 import { CategorySelectionPage, type YouthCategory } from "@/components/pages/category-selection-page";
 import { ToastContainer } from "@/components/ui/toast-container";
 import { AIChat } from "@/components/ai/ai-chat";
+import { RoleGuard } from "@/components/auth/role-guard";
 
 function AppContent() {
   const { currentUser, login, logout, currentPage, setCurrentPage, selectedYouthCategory, setSelectedYouthCategory } = useApp();
@@ -61,7 +62,11 @@ function AppContent() {
       case "chiqarilgan":
         return <ChiqarilganPage />;
       case "foydalanuvchilar":
-        return <FoydalanuvchilarPage />;
+        return (
+          <RoleGuard allow={["admin"]}>
+            <FoydalanuvchilarPage />
+          </RoleGuard>
+        );
       case "sozlamalar":
         return <SozlamalarPage />;
       default:

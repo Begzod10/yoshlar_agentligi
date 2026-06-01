@@ -31,6 +31,9 @@ export interface User {
   fullName: string;
   email: string;
   role: UserRole;
+  phone?: string;
+  status?: "active" | "inactive";
+  lastLogin?: string;
   organizationId?: string;
   organizationName?: string;
   districtId?: ToshkentDistrict; // District assignment for tashkilot_direktori
@@ -58,7 +61,7 @@ export interface Youth {
   districtId: ToshkentDistrict; // Required district
   phone: string;
   category: string;
-  status: "active" | "inactive" | "graduated";
+  status: "active" | "inactive" | "graduated" | "removed";
   assignedMasulId?: string;
   assignedMasulName?: string;
   organizationId?: string;
@@ -69,9 +72,7 @@ export interface Youth {
   createdAt: string;
   removalReason?: string;
   removalDate?: string;
-  // Caseworker notes (inline-edited by masul_hodim)
-  notes?: string;
-  contact?: string;
+  notes?: string
 }
 
 export interface Masul {
@@ -99,8 +100,9 @@ export interface IndividualPlan {
   description: string;
   startDate: string;
   endDate: string;
-  status: "planned" | "in_progress" | "completed" | "cancelled";
+  status: "planned" | "pending" | "in_progress" | "completed" | "cancelled";
   progress: number;
+  tasks?: unknown[];
   createdAt: string;
 }
 
@@ -115,14 +117,17 @@ export interface Meeting {
   date: string;
   time?: string;
   location: string;
-  type?: "individual" | "group" | "home_visit" | "online" | "in_person" | "phone";
-  agenda?: string;
+  type?: "individual" | "group" | "home_visit" | "online" | string ;
   status: "scheduled" | "completed" | "cancelled";
-  attendanceStatus?: "attended" | "no_show" | "rescheduled";
+
   notes?: string;
   photos?: string[];
+
+  attendanceStatus?: "attended" | "no_show" | "rescheduled";
   attachments?: string[];
+
   createdAt: string;
+  agenda?: string | null;
 }
 
 export interface CompletedWork {

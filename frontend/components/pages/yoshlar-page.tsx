@@ -4,6 +4,12 @@ import React from "react";
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { useYouthList } from "@/lib/api/hooks/use-core-api";
+import {
+  useForceAssignMasul,
+  useForceYouthStatus,
+  useRestoreYouth,
+} from "@/lib/api/hooks/use-admin";
 import { youthCategories } from "@/lib/mock-data";
 import type { Youth, ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
@@ -107,6 +113,12 @@ export function YoshlarPage() {
   const isTashkilotDirektor = currentUser?.role === "tashkilot_direktori";
   const canEdit = isAdmin || isDirektor || isTashkilotDirektor;
   const canAssign = isAdmin || isTashkilotDirektor;
+  const forceAssignMasul = useForceAssignMasul();
+  const forceYouthStatus = useForceYouthStatus();
+  const restoreYouth = useRestoreYouth();
+
+  // Fire GET /api/youth on mount
+  useYouthList({ page: 1, limit: 100 });
 
   const visibleYouth = getVisibleYouth();
   const visibleMasullar = getVisibleMasullar();
@@ -166,16 +178,17 @@ export function YoshlarPage() {
       districtId: newYouthDistrict,
       phone: formData.get("phone") as string,
       category: formData.get("category") as string,
+      // @ts-ignore
+      notes: {
+        text: formData.get("notes") as string,
+      },
       status: "active",
-      aiScore: Math.floor(Math.random() * 30) + 50,
-      plansCount: 0,
-      meetingsCount: 0,
     });
 
-    setIsLoading(false);
-    setIsAddDialogOpen(false);
-    setNewYouthDistrict(currentUser?.districtId || "");
-  };
+      setIsLoading(false);
+      setIsAddDialogOpen(false);
+      setNewYouthDistrict(currentUser?.districtId || "");
+    };
 
   const handleEditYouth = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -204,6 +217,26 @@ export function YoshlarPage() {
 
     await new Promise((r) => setTimeout(r, 500));
 
+    if (isAdmin) {
+      try {
+        const result = await forceAssignMasul.mutateAsync({
+          youthId: selectedYouth.id,
+          masulId: selectedMasulId,
+          overrideDistrict: true,
+        });
+        updateYouth(selectedYouth.id, {
+          assignedMasulId: result.masulId ?? selectedMasulId,
+          status: result.status,
+        });
+        setIsAssignDialogOpen(false);
+        setSelectedYouth(null);
+        setSelectedMasulId("");
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
     // Validate district assignment
     const isValid = validateDistrictAssignment(selectedYouth.districtId, selectedMasulId);
     if (!isValid) {
@@ -224,12 +257,38 @@ export function YoshlarPage() {
     setIsLoading(true);
 
     await new Promise((r) => setTimeout(r, 500));
+    if (isAdmin) {
+      try {
+        const result = await forceYouthStatus.mutateAsync({
+          youthId: selectedYouth.id,
+          status: "removed",
+        });
+        updateYouth(selectedYouth.id, { status: result.status });
+      } finally {
+        setIsLoading(false);
+        setIsRemoveDialogOpen(false);
+        setSelectedYouth(null);
+        setRemoveReason("");
+      }
+      return;
+    }
+
     removeYouth(selectedYouth.id, removeReason);
 
     setIsLoading(false);
     setIsRemoveDialogOpen(false);
     setSelectedYouth(null);
     setRemoveReason("");
+  };
+
+  const handleRestoreYouth = async (youth: Youth) => {
+    setIsLoading(true);
+    try {
+      const result = await restoreYouth.mutateAsync(youth.id);
+      updateYouth(youth.id, { status: result.status });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -240,6 +299,8 @@ export function YoshlarPage() {
         return <Badge variant="secondary">Nofaol</Badge>;
       case "graduated":
         return <Badge className="bg-chart-1 text-primary-foreground">Yakunlangan</Badge>;
+      case "removed":
+        return <Badge className="bg-destructive text-destructive-foreground">Chiqarilgan</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -329,10 +390,10 @@ export function YoshlarPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" className="bg-transparent">
+            {!isMasul && <Button variant="outline" className="bg-transparent">
               <Download className="h-4 w-4 mr-2" />
               Export
-            </Button>
+            </Button>}
           </div>
         </CardContent>
       </Card>
@@ -346,7 +407,7 @@ export function YoshlarPage() {
                 <TableHead>F.I.O</TableHead>
                 <TableHead>Tuman</TableHead>
                 <TableHead>Kategoriya</TableHead>
-                <TableHead>Mas'ul</TableHead>
+                {!isMasul && <TableHead>Mas'ul</TableHead>}
                 <TableHead>AI ball</TableHead>
                 <TableHead>Holat</TableHead>
                 <TableHead className="text-right">Amallar</TableHead>
@@ -355,7 +416,7 @@ export function YoshlarPage() {
             <TableBody>
               {filteredYouth.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={isMasul ? 6 : 7} className="text-center py-8 text-muted-foreground">
                     <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     Yoshlar topilmadi
                   </TableCell>
@@ -386,15 +447,15 @@ export function YoshlarPage() {
                     <TableCell>
                       <Badge variant="outline">{youth.category}</Badge>
                     </TableCell>
-                    <TableCell>
+                    {!isMasul &&  <TableCell>
                       {youth.assignedMasulName ? (
-                        <span className="text-sm">{youth.assignedMasulName}</span>
+                          <span className="text-sm">{youth.assignedMasulName}</span>
                       ) : (
-                        <Badge variant="secondary" className="text-orange-600 bg-orange-50">
-                          Biriktirilmagan
-                        </Badge>
+                          <Badge variant="secondary" className="text-orange-600 bg-orange-50">
+                            Biriktirilmagan
+                          </Badge>
                       )}
-                    </TableCell>
+                    </TableCell>}
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <span className={`font-bold ${getAiScoreColor(youth.aiScore)}`}>
@@ -470,6 +531,12 @@ export function YoshlarPage() {
                                 Chiqarish
                               </DropdownMenuItem>
                             </>
+                          )}
+                          {isAdmin && youth.status !== "active" && (
+                            <DropdownMenuItem onClick={() => void handleRestoreYouth(youth)}>
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Admin restore
+                            </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
