@@ -95,7 +95,7 @@ export function MasullarPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedMasul, setSelectedMasul] = useState<Masul | null>(null);
 
-  console.log(masullar)
+
   // Filter masullar based on role and selection
   let filteredMasullar = masullar.filter((m) => {
     // Role-based filtering
@@ -119,6 +119,7 @@ export function MasullarPage() {
     return matchesSearch;
   });
 
+
   // Get available districts and organizations for filters
   const availableDistricts = isTashkilotDirektor && currentUser?.districtId
     ? [currentUser.districtId]
@@ -128,7 +129,6 @@ export function MasullarPage() {
     ? organizations.filter((o) => o.districtId === currentUser.districtId)
     : organizations;
 
-  console.log(organizations)
   // Statistics
   const totalMasullar = filteredMasullar.length;
   const totalAssignedYouth = filteredMasullar.reduce((sum, m) => sum + m.assignedYouthCount, 0);
@@ -203,6 +203,7 @@ export function MasullarPage() {
     }
   };
 
+  console.log(selectedMasul)
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -386,6 +387,7 @@ export function MasullarPage() {
                           {canEdit && (
                             <DropdownMenuItem
                               onClick={() => {
+                                console.log(masul.email , "masul")
                                 setSelectedMasul(masul);
                                 setIsEditDialogOpen(true);
                               }}

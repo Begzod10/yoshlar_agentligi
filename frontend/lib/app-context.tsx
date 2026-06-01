@@ -172,7 +172,7 @@ function masulToApp(masul: MasulRead, organizations: Organization[]): Masul {
     return {
         id: masul.id,
         fullName: masul.fullName,
-        email: "",
+        email: masul.email || "",
         phone: masul.phone ?? "",
         districtId: asDistrict(masul.districtId),
         organizationId: masul.organizationId ?? "",
@@ -343,6 +343,8 @@ export function AppProvider({children}: { children: ReactNode }) {
 
     useEffect(() => {
         if (masullarQuery.data) {
+            console.log(masullarQuery.data.data
+            , "masss")
             setMasullar(masullarQuery.data.data.map((item) => masulToApp(item, organizations)));
         }
     }, [masullarQuery.data, organizations]);
@@ -916,6 +918,7 @@ export function AppProvider({children}: { children: ReactNode }) {
                 .patch<MasulRead>(`/api/masullar/${id}`, {
                     fullName: data.fullName,
                     organizationId: data.organizationId,
+                    email: data.email,
                     phone: data.phone,
                 })
                 .then(() => queryClient.invalidateQueries({queryKey: ["masullar"]}))

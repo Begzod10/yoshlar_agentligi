@@ -89,6 +89,7 @@ export type OrganizationCreate = Pick<OrganizationRead, "name" | "districtId" | 
 export type OrganizationUpdate = Partial<Omit<OrganizationCreate, "districtId">>;
 
 export interface MasulRead {
+    email: string;
   id: string;
   fullName: string;
   districtId: string;
