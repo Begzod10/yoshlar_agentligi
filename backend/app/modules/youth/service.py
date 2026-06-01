@@ -13,7 +13,6 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.modules.audit.service import record_audit
-from app.modules.masullar.models import Masul
 from app.modules.masullar.repository import MasullarRepository
 from app.modules.youth.models import Youth
 from app.modules.youth.repository import YouthRepository
@@ -51,6 +50,12 @@ class YouthService:
             return
         raise ForbiddenError(code="role_not_allowed")
 
+    async def _flush_refresh(self, youth: Youth) -> YouthRead:
+        """flush → DB triggerlar ishlaydi (updated_at), refresh → ob'ekt yangilanadi."""
+        await self._session.flush()
+        await self._session.refresh(youth)
+        return YouthRead.model_validate(youth)
+
     # ── CRUD ─────────────────────────────────────────────────────────
 
     async def create(self, data: YouthCreate, user: CurrentUser) -> YouthRead:
@@ -79,7 +84,7 @@ class YouthService:
             entity_type="youth", entity_id=youth.id,
             after={"full_name": youth.full_name, "district_id": youth.district_id},
         )
-        return YouthRead.model_validate(youth)
+        return await self._flush_refresh(youth)
 
     async def get(self, youth_id: UUID, user: CurrentUser) -> YouthRead:
         youth = await self._repo.get_by_id(youth_id)
@@ -89,11 +94,11 @@ class YouthService:
         return YouthRead.model_validate(youth)
 
     async def list(
-        self, user: CurrentUser, *,
-        district_id: str | None = None,
-        status: YouthStatus | None = None,
-        search: str | None = None,
-        page: int = 1, limit: int = 20,
+            self, user: CurrentUser, *,
+            district_id: str | None = None,
+            status: YouthStatus | None = None,
+            search: str | None = None,
+            page: int = 1, limit: int = 20,
     ) -> dict:
         if user.role == UserRole.MODERATOR:
             raise ForbiddenError(code="role_not_allowed")
@@ -138,7 +143,7 @@ class YouthService:
             entity_type="youth", entity_id=youth.id,
             before=before, after=updates,
         )
-        return YouthRead.model_validate(youth)
+        return await self._flush_refresh(youth)
 
     async def delete(self, youth_id: UUID, user: CurrentUser) -> None:
         if user.role not in CRUD_ROLES:
@@ -174,7 +179,8 @@ class YouthService:
                 await record_audit(
                     self._session, user=user, action="youth.assign.override",
                     entity_type="youth", entity_id=youth.id,
-                    after={"masul_id": str(masul.id), "masul_district": masul.district_id, "youth_district": youth.district_id},
+                    after={"masul_id": str(masul.id), "masul_district": masul.district_id,
+                           "youth_district": youth.district_id},
                 )
             else:
                 raise ValidationError(code="district_mismatch_youth_masul")
@@ -187,11 +193,12 @@ class YouthService:
             entity_type="youth", entity_id=youth.id,
             after={"masul_id": str(masul.id)},
         )
-        return YouthRead.model_validate(youth)
+        return await self._flush_refresh(youth)
 
     # ── status change ────────────────────────────────────────────────
 
-    async def change_status(self, youth_id: UUID, new_status: YouthStatus, user: CurrentUser, reason: str | None = None) -> YouthRead:
+    async def change_status(self, youth_id: UUID, new_status: YouthStatus, user: CurrentUser,
+                            reason: str | None = None) -> YouthRead:
         if user.role not in APPROVE_ROLES:
             raise ForbiddenError(code="role_not_allowed")
 
@@ -207,7 +214,7 @@ class YouthService:
             entity_type="youth", entity_id=youth.id,
             before={"status": old_status}, after={"status": new_status.value, "reason": reason},
         )
-        return YouthRead.model_validate(youth)
+        return await self._flush_refresh(youth)
 
     # ── removal workflow ─────────────────────────────────────────────
 
@@ -235,7 +242,7 @@ class YouthService:
             entity_type="youth", entity_id=youth.id,
             after=youth.removal_proposal,
         )
-        return YouthRead.model_validate(youth)
+        return await self._flush_refresh(youth)
 
     async def approve_removal(self, youth_id: UUID, user: CurrentUser) -> YouthRead:
         if user.role not in APPROVE_ROLES:
@@ -260,7 +267,7 @@ class YouthService:
             entity_type="youth", entity_id=youth.id,
             after={"status": "removed", "proposal": youth.removal_proposal},
         )
-        return YouthRead.model_validate(youth)
+        return await self._flush_refresh(youth)
 
     async def reject_removal(self, youth_id: UUID, data: RejectRemovalRequest, user: CurrentUser) -> YouthRead:
         if user.role not in APPROVE_ROLES:
@@ -285,7 +292,7 @@ class YouthService:
             entity_type="youth", entity_id=youth.id,
             after={"proposal": youth.removal_proposal},
         )
-        return YouthRead.model_validate(youth)
+        return await self._flush_refresh(youth)
 
     async def list_pending_removals(self, user: CurrentUser, *, page: int = 1, limit: int = 20) -> dict:
         if user.role not in APPROVE_ROLES:

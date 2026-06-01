@@ -1,3 +1,4 @@
+import contextlib
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
@@ -99,7 +100,10 @@ async def create_plan(
     repo = PlansRepository(session)
     await repo.add(plan)
     await record_audit(session, user=user, action="plan.create", entity_type="plan", entity_id=plan.id)
+    await session.flush()
     await session.commit()
+    with contextlib.suppress(Exception):
+        await session.refresh(plan)
     return PlanRead.model_validate(plan)
 
 
@@ -139,7 +143,10 @@ async def update_plan(
         setattr(plan, k, v)
 
     await record_audit(session, user=user, action="plan.update", entity_type="plan", entity_id=plan.id, after=updates)
+    await session.flush()
     await session.commit()
+    with contextlib.suppress(Exception):
+        await session.refresh(plan)
     return PlanRead.model_validate(plan)
 
 

@@ -1,3 +1,4 @@
+import contextlib
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
@@ -17,18 +18,18 @@ ALLOWED_ROLES = frozenset({UserRole.ADMIN, UserRole.DIREKTOR, UserRole.TASHKILOT
 
 def _check_access(user: CurrentUserDep) -> None:
     if user.role not in ALLOWED_ROLES:
-        raise ForbiddenError("role_not_allowed")
+        raise ForbiddenError(code="role_not_allowed")
 
 
 @router.get("")
 async def list_masullar(
-    session: DbSession,
-    user: CurrentUserDep,
-    district_id: str | None = None,
-    organization_id: UUID | None = None,
-    search: str | None = None,
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
+        session: DbSession,
+        user: CurrentUserDep,
+        district_id: str | None = None,
+        organization_id: UUID | None = None,
+        search: str | None = None,
+        page: int = Query(1, ge=1),
+        limit: int = Query(20, ge=1, le=100),
 ) -> dict:
     _check_access(user)
     effective_district = district_id
@@ -49,7 +50,7 @@ async def list_masullar(
 
 @router.post("", response_model=MasulRead, status_code=status.HTTP_201_CREATED)
 async def create_masul(
-    body: MasulCreate, session: DbSession, user: CurrentUserDep,
+        body: MasulCreate, session: DbSession, user: CurrentUserDep,
 ) -> MasulRead:
     _check_access(user)
     district = body.district_id
@@ -66,55 +67,62 @@ async def create_masul(
     repo = MasullarRepository(session)
     await repo.add(masul)
     await record_audit(session, user=user, action="masul.create", entity_type="masul", entity_id=masul.id)
+    await session.flush()
     await session.commit()
+    with contextlib.suppress(Exception):
+        await session.refresh(masul)
     return MasulRead.model_validate(masul)
 
 
 @router.get("/{masul_id}", response_model=MasulRead)
 async def get_masul(
-    masul_id: UUID, session: DbSession, user: CurrentUserDep,
+        masul_id: UUID, session: DbSession, user: CurrentUserDep,
 ) -> MasulRead:
     _check_access(user)
     masul = await MasullarRepository(session).get_by_id(masul_id)
     if masul is None:
-        raise NotFoundError("masul_not_found")
+        raise NotFoundError(code="masul_not_found")
     if user.role == UserRole.TASHKILOT_DIREKTORI and user.district_id != masul.district_id:
-        raise ForbiddenError("district_mismatch")
+        raise ForbiddenError(code="district_mismatch")
     return MasulRead.model_validate(masul)
 
 
 @router.patch("/{masul_id}", response_model=MasulRead)
 async def update_masul(
-    masul_id: UUID, body: MasulUpdate, session: DbSession, user: CurrentUserDep,
+        masul_id: UUID, body: MasulUpdate, session: DbSession, user: CurrentUserDep,
 ) -> MasulRead:
     _check_access(user)
     repo = MasullarRepository(session)
     masul = await repo.get_by_id(masul_id)
     if masul is None:
-        raise NotFoundError("masul_not_found")
+        raise NotFoundError(code="masul_not_found")
     if user.role == UserRole.TASHKILOT_DIREKTORI and user.district_id != masul.district_id:
-        raise ForbiddenError("district_mismatch")
+        raise ForbiddenError(code="district_mismatch")
 
     updates = body.model_dump(exclude_unset=True)
     for k, v in updates.items():
         setattr(masul, k, v)
 
-    await record_audit(session, user=user, action="masul.update", entity_type="masul", entity_id=masul.id, after=updates)
+    await record_audit(session, user=user, action="masul.update", entity_type="masul", entity_id=masul.id,
+                       after=updates)
+    await session.flush()
     await session.commit()
+    with contextlib.suppress(Exception):
+        await session.refresh(masul)
     return MasulRead.model_validate(masul)
 
 
 @router.delete("/{masul_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_masul(
-    masul_id: UUID, session: DbSession, user: CurrentUserDep,
+        masul_id: UUID, session: DbSession, user: CurrentUserDep,
 ) -> None:
     _check_access(user)
     repo = MasullarRepository(session)
     masul = await repo.get_by_id(masul_id)
     if masul is None:
-        raise NotFoundError("masul_not_found")
+        raise NotFoundError(code="masul_not_found")
     if user.role == UserRole.TASHKILOT_DIREKTORI and user.district_id != masul.district_id:
-        raise ForbiddenError("district_mismatch")
+        raise ForbiddenError(code="district_mismatch")
 
     await record_audit(session, user=user, action="masul.delete", entity_type="masul", entity_id=masul.id)
     await repo.delete(masul)

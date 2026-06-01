@@ -1,3 +1,4 @@
+import contextlib
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
@@ -95,7 +96,10 @@ async def create_meeting(
     repo = MeetingsRepository(session)
     await repo.add(meeting)
     await record_audit(session, user=user, action="meeting.create", entity_type="meeting", entity_id=meeting.id)
+    await session.flush()
     await session.commit()
+    with contextlib.suppress(Exception):
+        await session.refresh(meeting)
     return MeetingRead.model_validate(meeting)
 
 
@@ -132,7 +136,10 @@ async def update_meeting(
 
     await record_audit(session, user=user, action="meeting.update", entity_type="meeting", entity_id=meeting.id,
                        after=updates)
+    await session.flush()
     await session.commit()
+    with contextlib.suppress(Exception):
+        await session.refresh(meeting)
     return MeetingRead.model_validate(meeting)
 
 
@@ -159,7 +166,10 @@ async def update_attendance(
         entity_type="meeting", entity_id=meeting.id,
         after={"attendance_status": body.attendance_status.value},
     )
+    await session.flush()
     await session.commit()
+    with contextlib.suppress(Exception):
+        await session.refresh(meeting)
     return MeetingRead.model_validate(meeting)
 
 

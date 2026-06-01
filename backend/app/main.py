@@ -26,7 +26,15 @@ log = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
-    log.info("startup", env=get_settings().app_env)
+    settings = get_settings()
+    log.info("startup", env=settings.app_env)
+    # Dev/test muhitida demo ma'lumotlarni avtomatik yuklash
+    if settings.app_env in ("development", "test"):
+        try:
+            from scripts.seed_demo import seed_all
+            await seed_all()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("seed_demo skipped", reason=str(exc))
     yield
     log.info("shutdown")
 
@@ -68,6 +76,21 @@ def create_app() -> FastAPI:
     @app.get("/healthz", tags=["meta"])
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    if settings.is_dev:
+        @app.post("/api/dev/seed", tags=["dev"])
+        async def run_seed() -> dict[str, str]:
+            """Dev muhitida seed ni qo'lda ishlatish."""
+            from scripts.seed_demo import seed_all
+            await seed_all()
+            return {"status": "seeded"}
+
+        @app.delete("/api/dev/wipe", tags=["dev"])
+        async def wipe_demo() -> dict[str, str]:
+            """Dev muhitida barcha demo ma'lumotlarni o'chirish."""
+            from scripts.seed_demo import wipe_demo_data
+            await wipe_demo_data()
+            return {"status": "wiped"}
 
     return app
 
