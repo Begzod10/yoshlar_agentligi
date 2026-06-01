@@ -48,6 +48,8 @@ import {
   Monitor,
   Database,
   Download,
+  ChevronLeft,
+  ChevronRight,
   RotateCcw,
 } from "lucide-react";
 
@@ -62,7 +64,8 @@ const roleLabels = {
 export function SozlamalarPage() {
   const { currentUser, showToast } = useApp();
   const isAdmin = currentUser?.role === "admin";
-  const auditLog = useAdminAuditLog({ limit: 10, enabled: isAdmin });
+  const [auditPage, setAuditPage] = useState(1);
+  const auditLog = useAdminAuditLog({ page: auditPage, limit: 50, enabled: isAdmin });
   const systemInfo = useAdminSystemInfo(isAdmin);
   const tableCounts = useAdminTableCounts(isAdmin);
   const backups = useAdminBackups(isAdmin);
@@ -85,6 +88,12 @@ export function SozlamalarPage() {
   const [language, setLanguage] = useState("uz");
   const [maintenanceMessage, setMaintenanceMessage] = useState("");
   const [reportDistrict, setReportDistrict] = useState("Bekobod tumani");
+  const auditTotal = auditLog.data?.total ?? 0;
+  const auditLimit = auditLog.data?.limit ?? 50;
+  const currentAuditPage = auditLog.data?.page ?? auditPage;
+  const auditTotalPages = Math.max(1, Math.ceil(auditTotal / auditLimit));
+  const firstAuditRow = auditTotal === 0 ? 0 : (currentAuditPage - 1) * auditLimit + 1;
+  const lastAuditRow = Math.min(currentAuditPage * auditLimit, auditTotal);
 
   const handleSaveProfile = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -670,6 +679,40 @@ export function SozlamalarPage() {
                   ))}
                   {auditLog.data?.data.length === 0 && (
                     <p className="text-sm text-muted-foreground">Audit yozuvlari topilmadi</p>
+                  )}
+                  {auditTotal > auditLimit && (
+                    <div className="flex flex-col gap-3 border-t pt-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                      <span>
+                        {firstAuditRow}-{lastAuditRow} / {auditTotal} ta
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 bg-transparent"
+                          disabled={currentAuditPage <= 1}
+                          onClick={() => setAuditPage((current) => Math.max(1, current - 1))}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Oldingi
+                        </Button>
+                        <span className="min-w-16 text-center">
+                          {currentAuditPage}/{auditTotalPages}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 bg-transparent"
+                          disabled={currentAuditPage >= auditTotalPages}
+                          onClick={() => setAuditPage((current) => current + 1)}
+                        >
+                          Keyingi
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
                   )}
                 </div>
               </CardContent>

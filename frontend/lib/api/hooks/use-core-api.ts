@@ -91,7 +91,7 @@ export function useOrganizations(params: EntityListParams = {}) {
           district_id: params.districtId,
           search: params.search,
           page: params.page,
-          limit: params.limit ?? 200,
+          limit: params.limit ?? 50,
         },
       }),
   });
@@ -143,7 +143,7 @@ export function useMasullar(params: EntityListParams = {}) {
           organization_id: params.organizationId,
           search: params.search,
           page: params.page,
-          limit: params.limit ?? 200,
+          limit: params.limit ?? 50,
         },
       }),
   });
@@ -187,7 +187,7 @@ export function useYouthList(params: EntityListParams = {}) {
           status: params.status,
           search: params.search,
           page: params.page,
-          limit: params.limit ?? 200,
+          limit: params.limit ?? 50,
         },
       }),
   });
@@ -247,7 +247,7 @@ export function usePlans(params: EntityListParams = {}) {
           youth_id: params.youthId,
           status: params.status,
           page: params.page,
-          limit: params.limit ?? 200,
+          limit: params.limit ?? 50,
         },
       }),
   });
@@ -290,7 +290,7 @@ export function useMeetings(params: EntityListParams = {}) {
           from: params.from,
           to: params.to,
           page: params.page,
-          limit: params.limit ?? 200,
+          limit: params.limit ?? 50,
         },
       }),
   });
@@ -376,7 +376,7 @@ export function useFlags(params: EntityListParams = {}) {
           entity_type: params.entityType,
           raised_by: params.raisedBy,
           page: params.page,
-          limit: params.limit ?? 200,
+          limit: params.limit ?? 50,
         },
       }),
   });

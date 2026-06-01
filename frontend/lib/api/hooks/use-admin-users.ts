@@ -44,7 +44,7 @@ export function useAdminUsers(params: AdminUsersParams = {}) {
           district_id: params.districtId,
           search: params.search,
           page: params.page ?? 1,
-          limit: params.limit ?? 100,
+          limit: params.limit ?? 50,
         },
       }),
     retry: false,

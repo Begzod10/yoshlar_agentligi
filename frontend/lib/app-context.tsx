@@ -8,21 +8,19 @@ import {
   useState,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
 } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { useCurrentUser } from "@/lib/auth/session";
-import {
-  useOrganizations,
-  useMasullar,
-  useYouthList,
-  usePlans,
-  useMeetings,
-} from "@/lib/api/hooks/use-core-api";
+import { pageToHref, pathnameToPage } from "@/lib/navigation";
+import { usePageDataContext } from "@/lib/page-data-context";
 import type {
   MasulRead,
   MeetingRead,
+  MeetingAttendance,
   OrganizationRead,
   PlanRead,
   User as ApiUser,
@@ -175,7 +173,7 @@ function apiUserToAppUser(user: ApiUser): User {
   };
 }
 
-function organizationToApp(org: OrganizationRead): Organization {
+export function organizationToApp(org: OrganizationRead): Organization {
   return {
     id: org.id,
     name: org.name,
@@ -189,7 +187,7 @@ function organizationToApp(org: OrganizationRead): Organization {
   };
 }
 
-function masulToApp(masul: MasulRead, organizations: Organization[]): Masul {
+export function masulToApp(masul: MasulRead, organizations: Organization[]): Masul {
   const organization = organizations.find((org) => org.id === masul.organizationId);
   return {
     id: masul.id,
@@ -207,7 +205,7 @@ function masulToApp(masul: MasulRead, organizations: Organization[]): Masul {
   };
 }
 
-function youthToApp(youth: YouthRead, masullar: Masul[], organizations: Organization[]): Youth {
+export function youthToApp(youth: YouthRead, masullar: Masul[], organizations: Organization[]): Youth {
   const masul = masullar.find((item) => item.id === youth.masulId);
   const organization = organizations.find((item) => item.id === youth.organizationId);
   return {
@@ -217,7 +215,8 @@ function youthToApp(youth: YouthRead, masullar: Masul[], organizations: Organiza
     address: youth.address ?? "",
     districtId: asDistrict(youth.districtId),
     phone: youth.contact ?? "",
-    category: "boshqa",
+    category: "Boshqa",
+    notes: youth.notes ?? undefined,
     status: youth.status,
     assignedMasulId: youth.masulId ?? undefined,
     assignedMasulName: masul?.fullName,
@@ -234,7 +233,7 @@ function youthToApp(youth: YouthRead, masullar: Masul[], organizations: Organiza
   };
 }
 
-function planToApp(plan: PlanRead, youth: Youth[], masullar: Masul[]): IndividualPlan {
+export function planToApp(plan: PlanRead, youth: Youth[], masullar: Masul[]): IndividualPlan {
   const planYouth = youth.find((item) => item.id === plan.youthId);
   const masul = masullar.find((item) => item.id === plan.masulId);
   return {
@@ -253,7 +252,7 @@ function planToApp(plan: PlanRead, youth: Youth[], masullar: Masul[]): Individua
   };
 }
 
-function meetingToApp(meeting: MeetingRead, youth: Youth[], masullar: Masul[]): Meeting {
+export function meetingToApp(meeting: MeetingRead, youth: Youth[], masullar: Masul[]): Meeting {
   const meetingYouth = youth.find((item) => item.id === meeting.youthId);
   const masul = masullar.find((item) => item.id === meeting.masulId);
   return {
@@ -268,7 +267,12 @@ function meetingToApp(meeting: MeetingRead, youth: Youth[], masullar: Masul[]): 
     time: meeting.scheduledAt.slice(11, 16),
     location: meeting.location ?? "",
     type: meeting.type,
-    status: meeting.attendanceStatus === "attended" ? "completed" : "scheduled",
+    status:
+      meeting.attendanceStatus === "attended"
+        ? "completed"
+        : meeting.attendanceStatus === "no_show"
+          ? "cancelled"
+          : "scheduled",
     notes: meeting.attendanceNotes ?? undefined,
     photos: [],
     createdAt: meeting.createdAt,
@@ -276,13 +280,10 @@ function meetingToApp(meeting: MeetingRead, youth: Youth[], masullar: Masul[]): 
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const queryClient = useQueryClient();
   const sessionUser = useCurrentUser();
-  const organizationsQuery = useOrganizations({ limit: 200, enabled: Boolean(sessionUser) });
-  const masullarQuery = useMasullar({ limit: 200, enabled: Boolean(sessionUser) });
-  const youthQuery = useYouthList({ limit: 200, enabled: Boolean(sessionUser) });
-  const plansQuery = usePlans({ limit: 200, enabled: Boolean(sessionUser) });
-  const meetingsQuery = useMeetings({ limit: 200, enabled: Boolean(sessionUser) });
 
   // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -292,7 +293,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // UI State
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [currentPage, setCurrentPage] = useState("dashboard");
+  const [currentPage, setCurrentPageState] = useState(() => pathnameToPage(pathname));
   const [selectedDistrict, setSelectedDistrict] = useState<
     ToshkentDistrict | "all"
   >("all");
@@ -311,45 +312,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Toast State
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastIdRef = useRef(0);
 
   useEffect(() => {
     setCurrentUser(sessionUser ? apiUserToAppUser(sessionUser) : null);
   }, [sessionUser]);
 
   useEffect(() => {
-    if (organizationsQuery.data) {
-      setOrganizations(organizationsQuery.data.data.map(organizationToApp));
-    }
-  }, [organizationsQuery.data]);
+    setCurrentPageState(pathnameToPage(pathname));
+  }, [pathname]);
 
-  useEffect(() => {
-    if (masullarQuery.data) {
-      setMasullar(masullarQuery.data.data.map((item) => masulToApp(item, organizations)));
-    }
-  }, [masullarQuery.data, organizations]);
-
-  useEffect(() => {
-    if (youthQuery.data) {
-      setYouth(youthQuery.data.data.map((item) => youthToApp(item, masullar, organizations)));
-      setRemovedYouth(
-        youthQuery.data.data
-          .filter((item) => item.status === "removed" || item.status === "graduated")
-          .map((item) => youthToApp(item, masullar, organizations))
-      );
-    }
-  }, [youthQuery.data, masullar, organizations]);
-
-  useEffect(() => {
-    if (plansQuery.data) {
-      setPlans(plansQuery.data.data.map((item) => planToApp(item, youth, masullar)));
-    }
-  }, [plansQuery.data, youth, masullar]);
-
-  useEffect(() => {
-    if (meetingsQuery.data) {
-      setMeetings(meetingsQuery.data.data.map((item) => meetingToApp(item, youth, masullar)));
-    }
-  }, [meetingsQuery.data, youth, masullar]);
+  const setCurrentPage = useCallback(
+    (page: string) => {
+      setCurrentPageState(pathnameToPage(pageToHref(page)));
+      router.push(pageToHref(page));
+    },
+    [router]
+  );
 
   // Auth Functions
   const login = useCallback(
@@ -376,7 +355,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     setCurrentUser(null);
-    setCurrentPage("dashboard");
+    setCurrentPageState("dashboard");
     setSelectedDistrict("all");
     setSelectedYouthCategory(null);
   }, []);
@@ -398,7 +377,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Toast Functions
   const addToast = useCallback((toast: Omit<Toast, "id">) => {
-    const id = `toast-${Date.now()}`;
+    toastIdRef.current += 1;
+    const id = `toast-${Date.now()}-${toastIdRef.current}`;
     setToasts((prev) => [...prev, { ...toast, id }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -646,7 +626,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           contact: youthData.phone || null,
           dateOfBirth: youthData.birthDate || null,
           address: youthData.address || null,
-          notes: youthData.category || null,
+          notes: youthData.notes || null,
         })
         .then(() => queryClient.invalidateQueries({ queryKey: ["youth"] }))
         .catch(() =>
@@ -689,7 +669,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           contact: data.phone,
           dateOfBirth: data.birthDate,
           address: data.address,
-          notes: data.category,
+          notes: data.notes,
         })
         .then(() => queryClient.invalidateQueries({ queryKey: ["youth"] }))
         .catch(() =>
@@ -1068,13 +1048,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMeetings((prev) =>
         prev.map((m) => (m.id === id ? { ...m, ...data } : m))
       );
-      void api
-        .patch<MeetingRead>(`/api/meetings/${id}`, {
-          scheduledAt: data.time && data.date ? `${data.date}T${data.time}:00` : data.date,
-          type: data.type ?? data.title,
-          location: data.location,
-          agenda: data.description,
-        })
+      const attendanceStatusByUiStatus: Partial<Record<Meeting["status"], MeetingAttendance>> = {
+        scheduled: "scheduled",
+        completed: "attended",
+        cancelled: "no_show",
+      };
+      const attendanceStatus = data.status ? attendanceStatusByUiStatus[data.status] : undefined;
+      const detailPatch =
+        data.time || data.date || data.type || data.title || data.location || data.description
+          ? api.patch<MeetingRead>(`/api/meetings/${id}`, {
+              scheduledAt: data.time && data.date ? `${data.date}T${data.time}:00` : data.date,
+              type: data.type ?? data.title,
+              location: data.location,
+              agenda: data.description,
+            })
+          : null;
+      const attendancePatch = attendanceStatus
+        ? api.patch<MeetingRead>(`/api/meetings/${id}/attendance`, {
+            attendanceStatus,
+            attendanceNotes: data.notes,
+          })
+        : null;
+      void Promise.all([detailPatch, attendancePatch].filter(Boolean))
         .then(() => queryClient.invalidateQueries({ queryKey: ["meetings"] }))
         .catch(() =>
           addToast({
@@ -1385,5 +1380,156 @@ export function useApp() {
   if (context === undefined) {
     throw new Error("useApp must be used within an AppProvider");
   }
-  return context;
+  const pageData = usePageDataContext();
+  if (!pageData) return context;
+
+  const organizations = pageData.organizations ?? context.organizations;
+  const youth = pageData.youth ?? context.youth;
+  const masullar = pageData.masullar ?? context.masullar;
+  const plans = pageData.plans ?? context.plans;
+  const meetings = pageData.meetings ?? context.meetings;
+  const removedYouth = pageData.removedYouth ?? context.removedYouth;
+
+  const getVisibleYouth = () => {
+    const currentUser = context.currentUser;
+    if (!currentUser) return [];
+
+    switch (currentUser.role) {
+      case "admin":
+      case "direktor":
+      case "moderator":
+        if (context.selectedDistrict !== "all") {
+          return youth.filter((y) => y.districtId === context.selectedDistrict);
+        }
+        return youth;
+      case "tashkilot_direktori":
+        return youth.filter((y) => y.districtId === currentUser.districtId);
+      case "masul_hodim":
+        return youth.filter((y) => y.assignedMasulId === currentUser.id);
+      default:
+        return [];
+    }
+  };
+
+  const getVisibleOrganizations = () => {
+    const currentUser = context.currentUser;
+    if (!currentUser) return [];
+
+    if (["admin", "direktor", "moderator"].includes(currentUser.role)) {
+      if (context.selectedDistrict !== "all") {
+        return organizations.filter((o) => o.districtId === context.selectedDistrict);
+      }
+      return organizations;
+    }
+    if (currentUser.districtId) {
+      return organizations.filter((o) => o.districtId === currentUser.districtId);
+    }
+    return [];
+  };
+
+  const getVisibleMasullar = () => {
+    const currentUser = context.currentUser;
+    if (!currentUser) return [];
+
+    if (["admin", "direktor", "moderator"].includes(currentUser.role)) {
+      if (context.selectedDistrict !== "all") {
+        return masullar.filter((m) => m.districtId === context.selectedDistrict);
+      }
+      return masullar;
+    }
+    if (currentUser.role === "tashkilot_direktori" && currentUser.districtId) {
+      return masullar.filter((m) => m.districtId === currentUser.districtId);
+    }
+    if (currentUser.role === "masul_hodim") {
+      return masullar.filter((m) => m.id === currentUser.id);
+    }
+    return [];
+  };
+
+  const getVisiblePlans = () => {
+    const currentUser = context.currentUser;
+    if (!currentUser) return [];
+
+    if (currentUser.role === "masul_hodim") {
+      return plans.filter((p) => p.masulId === currentUser.id);
+    }
+
+    const visibleYouthIds = getVisibleYouth().map((item) => item.id);
+    return plans.filter((p) => visibleYouthIds.includes(p.youthId));
+  };
+
+  const getVisibleMeetings = () => {
+    const currentUser = context.currentUser;
+    if (!currentUser) return [];
+
+    if (currentUser.role === "masul_hodim") {
+      return meetings.filter((m) => m.masulId === currentUser.id);
+    }
+
+    const visibleYouthIds = getVisibleYouth().map((item) => item.id);
+    return meetings.filter((m) => visibleYouthIds.includes(m.youthId));
+  };
+
+  const getDistrictStats = (districtFilter?: ToshkentDistrict | "all") => {
+    const districts =
+      districtFilter && districtFilter !== "all"
+        ? [districtFilter]
+        : [...TOSHKENT_VILOYATI_DISTRICTS];
+
+    return districts.map((districtId) => {
+      const districtYouth = youth.filter((y) => y.districtId === districtId);
+      const districtOrgs = organizations.filter((o) => o.districtId === districtId);
+      const districtMasullar = masullar.filter((m) => m.districtId === districtId);
+      const districtYouthIds = districtYouth.map((y) => y.id);
+      const districtPlans = plans.filter((p) => districtYouthIds.includes(p.youthId));
+      const districtMeetings = meetings.filter((m) => districtYouthIds.includes(m.youthId));
+      const completedPlans = districtPlans.filter((p) => p.status === "completed").length;
+      const totalPlans = districtPlans.length;
+
+      return {
+        districtId,
+        totalYouth: districtYouth.length,
+        activeYouth: districtYouth.filter((y) => y.status === "active").length,
+        graduatedYouth: districtYouth.filter((y) => y.status === "graduated").length,
+        totalOrganizations: districtOrgs.length,
+        totalMasullar: districtMasullar.length,
+        totalPlans,
+        completedPlans,
+        totalMeetings: districtMeetings.length,
+        completionRate: totalPlans > 0 ? (completedPlans / totalPlans) * 100 : 0,
+        averageAiScore:
+          districtYouth.length > 0
+            ? districtYouth.reduce((sum, y) => sum + y.aiScore, 0) / districtYouth.length
+            : 0,
+      };
+    });
+  };
+
+  return {
+    ...context,
+    organizations,
+    setOrganizations: pageData.setOrganizations ?? context.setOrganizations,
+    youth,
+    setYouth: pageData.setYouth ?? context.setYouth,
+    masullar,
+    setMasullar: pageData.setMasullar ?? context.setMasullar,
+    plans,
+    setPlans: pageData.setPlans ?? context.setPlans,
+    meetings,
+    setMeetings: pageData.setMeetings ?? context.setMeetings,
+    removedYouth,
+    setRemovedYouth: pageData.setRemovedYouth ?? context.setRemovedYouth,
+    getVisibleYouth,
+    getVisibleOrganizations,
+    getVisibleMasullar,
+    getVisiblePlans,
+    getVisibleMeetings,
+    getDistrictStats,
+    getMasullarsForDistrict: (districtId: ToshkentDistrict) =>
+      masullar.filter((m) => m.districtId === districtId),
+    validateDistrictAssignment: (youthDistrictId: ToshkentDistrict, masulId: string) => {
+      const masul = masullar.find((m) => m.id === masulId);
+      return Boolean(masul && masul.districtId === youthDistrictId);
+    },
+  };
 }

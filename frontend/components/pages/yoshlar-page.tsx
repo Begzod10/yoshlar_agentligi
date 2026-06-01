@@ -2,14 +2,16 @@
 
 import React from "react";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { usePageDataContext } from "@/lib/page-data-context";
+import { ResourcePagination } from "@/components/app/resource-pagination";
 import {
   useForceAssignMasul,
   useForceYouthStatus,
   useRestoreYouth,
 } from "@/lib/api/hooks/use-admin";
-import { youthCategories } from "@/lib/mock-data";
+import { useMeetings, usePlans } from "@/lib/api/hooks/use-core-api";
 import type { Youth, ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
@@ -58,6 +60,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,6 +72,8 @@ import {
 import {
   Search,
   Plus,
+  ChevronLeft,
+  ChevronRight,
   MoreHorizontal,
   Eye,
   Edit,
@@ -103,7 +108,6 @@ export function YoshlarPage() {
     removeYouth,
     validateDistrictAssignment,
     canViewAllDistricts,
-    setCurrentPage,
   } = useApp();
 
   const isAdmin = currentUser?.role === "admin";
@@ -121,7 +125,6 @@ export function YoshlarPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [districtFilter, setDistrictFilter] = useState<ToshkentDistrict | "all">("all");
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -135,20 +138,79 @@ export function YoshlarPage() {
   const [selectedMasulId, setSelectedMasulId] = useState<string>("");
   const [removeReason, setRemoveReason] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedYouthPlansPage, setSelectedYouthPlansPage] = useState(1);
+  const [selectedYouthMeetingsPage, setSelectedYouthMeetingsPage] = useState(1);
   const [newYouthDistrict, setNewYouthDistrict] = useState<ToshkentDistrict | "">(
     currentUser?.districtId || ""
   );
-
-  // Apply filters
-  const filteredYouth = visibleYouth.filter((y) => {
-    const matchesSearch =
-      y.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      y.phone.includes(searchQuery);
-    const matchesStatus = statusFilter === "all" || y.status === statusFilter;
-    const matchesCategory = categoryFilter === "all" || y.category === categoryFilter;
-    const matchesDistrict = districtFilter === "all" || y.districtId === districtFilter;
-    return matchesSearch && matchesStatus && matchesCategory && matchesDistrict;
+  const selectedYouthId = selectedYouth?.id ?? "";
+  const selectedYouthPlansQuery = usePlans({
+    youthId: selectedYouthId,
+    page: selectedYouthPlansPage,
+    limit: 50,
+    enabled: isViewDialogOpen && Boolean(selectedYouthId),
   });
+  const selectedYouthMeetingsQuery = useMeetings({
+    youthId: selectedYouthId,
+    page: selectedYouthMeetingsPage,
+    limit: 50,
+    enabled: isViewDialogOpen && Boolean(selectedYouthId),
+  });
+  const selectedYouthPlans = selectedYouthPlansQuery.data?.data ?? [];
+  const selectedYouthMeetings = selectedYouthMeetingsQuery.data?.data ?? [];
+  const selectedYouthPlansTotal = selectedYouthPlansQuery.data?.total ?? 0;
+  const selectedYouthPlansLimit = selectedYouthPlansQuery.data?.limit ?? 50;
+  const selectedYouthPlansCurrentPage = selectedYouthPlansQuery.data?.page ?? selectedYouthPlansPage;
+  const selectedYouthPlansTotalPages = Math.max(
+    1,
+    Math.ceil(selectedYouthPlansTotal / selectedYouthPlansLimit)
+  );
+  const selectedYouthPlansFirst =
+    selectedYouthPlansTotal === 0
+      ? 0
+      : (selectedYouthPlansCurrentPage - 1) * selectedYouthPlansLimit + 1;
+  const selectedYouthPlansLast = Math.min(
+    selectedYouthPlansCurrentPage * selectedYouthPlansLimit,
+    selectedYouthPlansTotal
+  );
+  const selectedYouthMeetingsTotal = selectedYouthMeetingsQuery.data?.total ?? 0;
+  const selectedYouthMeetingsLimit = selectedYouthMeetingsQuery.data?.limit ?? 50;
+  const selectedYouthMeetingsCurrentPage =
+    selectedYouthMeetingsQuery.data?.page ?? selectedYouthMeetingsPage;
+  const selectedYouthMeetingsTotalPages = Math.max(
+    1,
+    Math.ceil(selectedYouthMeetingsTotal / selectedYouthMeetingsLimit)
+  );
+  const selectedYouthMeetingsFirst =
+    selectedYouthMeetingsTotal === 0
+      ? 0
+      : (selectedYouthMeetingsCurrentPage - 1) * selectedYouthMeetingsLimit + 1;
+  const selectedYouthMeetingsLast = Math.min(
+    selectedYouthMeetingsCurrentPage * selectedYouthMeetingsLimit,
+    selectedYouthMeetingsTotal
+  );
+  const pageData = usePageDataContext();
+  const effectiveDistrict =
+    districtFilter !== "all"
+      ? districtFilter
+      : selectedDistrict !== "all"
+        ? selectedDistrict
+        : undefined;
+
+  useEffect(() => {
+    pageData?.setResourceParams("youth", {
+      districtId: effectiveDistrict,
+      status: statusFilter !== "all" ? statusFilter : undefined,
+      search: searchQuery.trim() || undefined,
+    });
+  }, [effectiveDistrict, pageData, searchQuery, statusFilter]);
+
+  useEffect(() => {
+    setSelectedYouthPlansPage(1);
+    setSelectedYouthMeetingsPage(1);
+  }, [isViewDialogOpen, selectedYouthId]);
+
+  const filteredYouth = visibleYouth;
 
   // Get masullar for the selected youth's district (for assignment)
   const getAvailableMasullar = (youth: Youth) => {
@@ -173,7 +235,8 @@ export function YoshlarPage() {
       address: formData.get("address") as string,
       districtId: newYouthDistrict,
       phone: formData.get("phone") as string,
-      category: formData.get("category") as string,
+      category: "Boshqa",
+      notes: (formData.get("notes") as string) || undefined,
       status: "active",
       aiScore: Math.floor(Math.random() * 30) + 50,
       plansCount: 0,
@@ -198,7 +261,7 @@ export function YoshlarPage() {
       birthDate: formData.get("birthDate") as string,
       address: formData.get("address") as string,
       phone: formData.get("phone") as string,
-      category: formData.get("category") as string,
+      notes: (formData.get("notes") as string) || undefined,
     });
 
     setIsLoading(false);
@@ -308,6 +371,45 @@ export function YoshlarPage() {
     return "text-destructive";
   };
 
+  const getPlanStatusBadge = (status: string) => {
+    switch (status) {
+      case "completed":
+        return <Badge className="bg-accent/10 text-accent border-accent/20">Bajarilgan</Badge>;
+      case "in_progress":
+        return <Badge className="bg-primary/10 text-primary border-primary/20">Jarayonda</Badge>;
+      case "draft":
+        return <Badge variant="secondary">Qoralama</Badge>;
+      case "cancelled":
+        return <Badge className="bg-destructive/10 text-destructive border-destructive/20">Bekor qilingan</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const getMeetingStatusBadge = (status: string) => {
+    switch (status) {
+      case "attended":
+        return <Badge className="bg-accent/10 text-accent border-accent/20">O'tkazildi</Badge>;
+      case "scheduled":
+        return <Badge className="bg-primary/10 text-primary border-primary/20">Rejalashtirilgan</Badge>;
+      case "no_show":
+        return <Badge className="bg-destructive/10 text-destructive border-destructive/20">Kelmadi</Badge>;
+      case "rescheduled":
+        return <Badge variant="secondary">Ko'chirildi</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const formatDate = (value?: string | null) => {
+    if (!value) return "-";
+    return new Intl.DateTimeFormat("uz-UZ", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(value));
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -367,21 +469,8 @@ export function YoshlarPage() {
               <SelectContent>
                 <SelectItem value="all">Barcha holatlar</SelectItem>
                 <SelectItem value="active">Faol</SelectItem>
-                <SelectItem value="inactive">Nofaol</SelectItem>
                 <SelectItem value="graduated">Yakunlangan</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-full md:w-[180px]">
-                <SelectValue placeholder="Kategoriya" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Barcha kategoriyalar</SelectItem>
-                {youthCategories.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
-                  </SelectItem>
-                ))}
+                <SelectItem value="removed">Chiqarilgan</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" className="bg-transparent">
@@ -400,7 +489,7 @@ export function YoshlarPage() {
               <TableRow>
                 <TableHead>F.I.O</TableHead>
                 <TableHead>Tuman</TableHead>
-                <TableHead>Kategoriya</TableHead>
+                <TableHead>Izoh</TableHead>
                 <TableHead>Mas'ul</TableHead>
                 <TableHead>AI ball</TableHead>
                 <TableHead>Holat</TableHead>
@@ -439,7 +528,9 @@ export function YoshlarPage() {
                       <DistrictBadge districtId={youth.districtId} size="sm" />
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{youth.category}</Badge>
+                      <span className="line-clamp-2 text-sm text-muted-foreground">
+                        {youth.notes || "-"}
+                      </span>
                     </TableCell>
                     <TableCell>
                       {youth.assignedMasulName ? (
@@ -539,6 +630,7 @@ export function YoshlarPage() {
               )}
             </TableBody>
           </Table>
+          <ResourcePagination resource="youth" />
         </CardContent>
       </Card>
 
@@ -573,49 +665,40 @@ export function YoshlarPage() {
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label>Tuman *</Label>
-                {isTashkilotDirektor && currentUser?.districtId ? (
-                  <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span>{currentUser.districtId}</span>
-                    <input type="hidden" name="districtId" value={currentUser.districtId} />
-                  </div>
-                ) : (
-                  <Select
-                    value={newYouthDistrict}
-                    onValueChange={(val) => setNewYouthDistrict(val as ToshkentDistrict)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Tumanni tanlang" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TOSHKENT_VILOYATI_DISTRICTS.map((district) => (
-                        <SelectItem key={district} value={district}>
-                          {district}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+                <div className="grid gap-2">
+                  <Label>Tuman *</Label>
+                  {isTashkilotDirektor && currentUser?.districtId ? (
+                    <div className="flex items-center gap-2 rounded-md bg-muted p-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span>{currentUser.districtId}</span>
+                      <input type="hidden" name="districtId" value={currentUser.districtId} />
+                    </div>
+                  ) : (
+                    <Select
+                      value={newYouthDistrict}
+                      onValueChange={(val) => setNewYouthDistrict(val as ToshkentDistrict)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Tumanni tanlang" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TOSHKENT_VILOYATI_DISTRICTS.map((district) => (
+                          <SelectItem key={district} value={district}>
+                            {district}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="address">Manzil *</Label>
                 <Input id="address" name="address" required placeholder="To'liq manzil" />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="category">Kategoriya *</Label>
-                <Select name="category" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Kategoriyani tanlang" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {youthCategories.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="notes">Izoh</Label>
+                <Textarea id="notes" name="notes" placeholder="Qo'shimcha izoh" />
               </div>
             </div>
             <DialogFooter>
@@ -649,9 +732,11 @@ export function YoshlarPage() {
             <Tabs defaultValue="info" className="w-full">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="info">Ma'lumotlar</TabsTrigger>
-                <TabsTrigger value="plans">Rejalar ({selectedYouth.plansCount})</TabsTrigger>
+                <TabsTrigger value="plans">
+                  Rejalar ({selectedYouthPlansQuery.data?.total ?? selectedYouth.plansCount})
+                </TabsTrigger>
                 <TabsTrigger value="meetings">
-                  Uchrashuvlar ({selectedYouth.meetingsCount})
+                  Uchrashuvlar ({selectedYouthMeetingsQuery.data?.total ?? selectedYouth.meetingsCount})
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="info" className="space-y-4 mt-4">
@@ -678,8 +763,10 @@ export function YoshlarPage() {
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <span className="text-sm text-muted-foreground">Kategoriya</span>
-                      <p className="font-medium">{selectedYouth.category}</p>
+                      <span className="text-sm text-muted-foreground">Izoh</span>
+                      <p className="font-medium whitespace-pre-wrap">
+                        {selectedYouth.notes || "-"}
+                      </p>
                     </div>
                     <div>
                       <span className="text-sm text-muted-foreground">Mas'ul hodim</span>
@@ -702,43 +789,155 @@ export function YoshlarPage() {
                 </div>
               </TabsContent>
               <TabsContent value="plans" className="mt-4">
-                <div className="text-center py-8 text-muted-foreground">
-                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  {selectedYouth.plansCount > 0 ? (
-                    <p>
-                      {selectedYouth.plansCount} ta reja mavjud. Rejalar sahifasida ko'ring.
-                    </p>
-                  ) : (
+                {selectedYouthPlansQuery.isPending ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-20 border border-gray-300 bg-gray-200 dark:border-gray-700 dark:bg-gray-800" />
+                    <Skeleton className="h-20 border border-gray-300 bg-gray-200 dark:border-gray-700 dark:bg-gray-800" />
+                  </div>
+                ) : selectedYouthPlansQuery.isError ? (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                    Rejalarni yuklab bo'lmadi. Backend javob bermadi.
+                  </div>
+                ) : selectedYouthPlans.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedYouthPlans.map((plan) => (
+                      <div key={plan.id} className="rounded-md border border-border p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h4 className="font-medium text-foreground">{plan.title}</h4>
+                            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                              {plan.goal || "Maqsad kiritilmagan"}
+                            </p>
+                          </div>
+                          {getPlanStatusBadge(plan.status)}
+                        </div>
+                        <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-3">
+                          <span>Boshlanish: {formatDate(plan.startDate)}</span>
+                          <span>Tugash: {formatDate(plan.endDate)}</span>
+                          <span>Progress: {plan.progress}%</span>
+                        </div>
+                        <Progress value={plan.progress} className="mt-3" />
+                      </div>
+                    ))}
+                    {selectedYouthPlansTotal > selectedYouthPlansLimit && (
+                      <div className="flex flex-col gap-3 border-t pt-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                        <span>
+                          {selectedYouthPlansFirst}-{selectedYouthPlansLast} / {selectedYouthPlansTotal} ta
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1 bg-transparent"
+                            disabled={selectedYouthPlansCurrentPage <= 1}
+                            onClick={() => setSelectedYouthPlansPage((current) => Math.max(1, current - 1))}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                            Oldingi
+                          </Button>
+                          <span className="min-w-16 text-center">
+                            {selectedYouthPlansCurrentPage}/{selectedYouthPlansTotalPages}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1 bg-transparent"
+                            disabled={selectedYouthPlansCurrentPage >= selectedYouthPlansTotalPages}
+                            onClick={() => setSelectedYouthPlansPage((current) => current + 1)}
+                          >
+                            Keyingi
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     <p>Hozircha rejalar yo'q</p>
-                  )}
-                  <Button
-                    variant="outline"
-                    className="mt-4 bg-transparent"
-                    onClick={() => setCurrentPage("rejalar")}
-                  >
-                    Rejalarga o'tish
-                  </Button>
-                </div>
+                  </div>
+                )}
               </TabsContent>
               <TabsContent value="meetings" className="mt-4">
-                <div className="text-center py-8 text-muted-foreground">
-                  <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  {selectedYouth.meetingsCount > 0 ? (
-                    <p>
-                      {selectedYouth.meetingsCount} ta uchrashuv mavjud. Uchrashuvlar sahifasida
-                      ko'ring.
-                    </p>
-                  ) : (
+                {selectedYouthMeetingsQuery.isPending ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-20 border border-gray-300 bg-gray-200 dark:border-gray-700 dark:bg-gray-800" />
+                    <Skeleton className="h-20 border border-gray-300 bg-gray-200 dark:border-gray-700 dark:bg-gray-800" />
+                  </div>
+                ) : selectedYouthMeetingsQuery.isError ? (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                    Uchrashuvlarni yuklab bo'lmadi. Backend javob bermadi.
+                  </div>
+                ) : selectedYouthMeetings.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedYouthMeetings.map((meeting) => (
+                      <div key={meeting.id} className="rounded-md border border-border p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h4 className="font-medium text-foreground">
+                              {meeting.type || "Uchrashuv"}
+                            </h4>
+                            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                              {meeting.agenda || "Kun tartibi kiritilmagan"}
+                            </p>
+                          </div>
+                          {getMeetingStatusBadge(meeting.attendanceStatus)}
+                        </div>
+                        <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                          <span>Sana: {formatDate(meeting.scheduledAt)}</span>
+                          <span>Joy: {meeting.location || "-"}</span>
+                        </div>
+                        {meeting.attendanceNotes && (
+                          <p className="mt-3 text-sm text-muted-foreground">
+                            {meeting.attendanceNotes}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                    {selectedYouthMeetingsTotal > selectedYouthMeetingsLimit && (
+                      <div className="flex flex-col gap-3 border-t pt-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                        <span>
+                          {selectedYouthMeetingsFirst}-{selectedYouthMeetingsLast} / {selectedYouthMeetingsTotal} ta
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1 bg-transparent"
+                            disabled={selectedYouthMeetingsCurrentPage <= 1}
+                            onClick={() => setSelectedYouthMeetingsPage((current) => Math.max(1, current - 1))}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                            Oldingi
+                          </Button>
+                          <span className="min-w-16 text-center">
+                            {selectedYouthMeetingsCurrentPage}/{selectedYouthMeetingsTotalPages}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1 bg-transparent"
+                            disabled={selectedYouthMeetingsCurrentPage >= selectedYouthMeetingsTotalPages}
+                            onClick={() => setSelectedYouthMeetingsPage((current) => current + 1)}
+                          >
+                            Keyingi
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     <p>Hozircha uchrashuvlar yo'q</p>
-                  )}
-                  <Button
-                    variant="outline"
-                    className="mt-4 bg-transparent"
-                    onClick={() => setCurrentPage("uchrashuvlar")}
-                  >
-                    Uchrashuvlarga o'tish
-                  </Button>
-                </div>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           )}
@@ -787,12 +986,9 @@ export function YoshlarPage() {
                 </div>
                 <div className="grid gap-2">
                   <Label>Tuman</Label>
-                  <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                  <div className="flex items-center gap-2 rounded-md bg-muted p-2">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span>{selectedYouth.districtId}</span>
-                    <Badge variant="secondary" className="ml-auto text-xs">
-                      O'zgartirib bo'lmaydi
-                    </Badge>
+                    <span className="min-w-0 truncate">{selectedYouth.districtId}</span>
                   </div>
                 </div>
                 <div className="grid gap-2">
@@ -805,19 +1001,13 @@ export function YoshlarPage() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="edit-category">Kategoriya</Label>
-                  <Select name="category" defaultValue={selectedYouth.category}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {youthCategories.map((cat) => (
-                        <SelectItem key={cat} value={cat}>
-                          {cat}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="edit-notes">Izoh</Label>
+                  <Textarea
+                    id="edit-notes"
+                    name="notes"
+                    defaultValue={selectedYouth.notes}
+                    placeholder="Qo'shimcha izoh"
+                  />
                 </div>
               </div>
               <DialogFooter>
@@ -875,12 +1065,12 @@ export function YoshlarPage() {
                     <SelectValue placeholder="Mas'ulni tanlang" />
                   </SelectTrigger>
                   <SelectContent>
-                    {getAvailableMasullar(selectedYouth).length === 0 ? (
+                    {getAvailableMasullar(selectedYouth).filter((masul) => masul.id).length === 0 ? (
                       <div className="p-4 text-center text-sm text-muted-foreground">
                         Bu tumanda mas'ul hodim yo'q
                       </div>
                     ) : (
-                      getAvailableMasullar(selectedYouth).map((masul) => (
+                      getAvailableMasullar(selectedYouth).filter((masul) => masul.id).map((masul) => (
                         <SelectItem key={masul.id} value={masul.id}>
                           <div className="flex items-center gap-2">
                             <span>{masul.fullName}</span>

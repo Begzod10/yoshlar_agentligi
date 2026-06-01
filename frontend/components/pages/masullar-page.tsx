@@ -2,8 +2,10 @@
 
 import React from "react"
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { usePageDataContext } from "@/lib/page-data-context";
+import { ResourcePagination } from "@/components/app/resource-pagination";
 import type { Masul, ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +28,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -86,38 +98,36 @@ export function MasullarPage() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedMasul, setSelectedMasul] = useState<Masul | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<Masul | null>(null);
+  const pageData = usePageDataContext();
+  const effectiveDistrict =
+    isTashkilotDirektor && currentUser?.districtId
+      ? currentUser.districtId
+      : districtFilter !== "all"
+        ? districtFilter
+        : selectedDistrict !== "all"
+          ? selectedDistrict
+          : undefined;
 
-  // Filter masullar based on role and selection
-  let filteredMasullar = masullar.filter((m) => {
-    // Role-based filtering
-    if (isTashkilotDirektor && currentUser?.districtId) {
-      if (m.districtId !== currentUser.districtId) return false;
-    }
+  useEffect(() => {
+    pageData?.setResourceParams("organizations", {
+      districtId: effectiveDistrict,
+    });
+    pageData?.setResourceParams("masullar", {
+      districtId: effectiveDistrict,
+      organizationId: orgFilter !== "all" ? orgFilter : undefined,
+      search: searchQuery.trim() || undefined,
+    });
+  }, [effectiveDistrict, orgFilter, pageData, searchQuery]);
 
-    // Global district filter
-    if (selectedDistrict && m.districtId !== selectedDistrict) return false;
-
-    // Local filters
-    if (districtFilter !== "all" && m.districtId !== districtFilter) return false;
-    if (orgFilter !== "all" && m.organizationId !== orgFilter) return false;
-
-    // Search filter
-    const matchesSearch =
-      m.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.phone.includes(searchQuery);
-
-    return matchesSearch;
-  });
+  const filteredMasullar = masullar;
 
   // Get available districts and organizations for filters
   const availableDistricts = isTashkilotDirektor && currentUser?.districtId
     ? [currentUser.districtId]
     : TOSHKENT_VILOYATI_DISTRICTS;
 
-  const availableOrganizations = isTashkilotDirektor && currentUser?.districtId
-    ? organizations.filter((o) => o.districtId === currentUser.districtId)
-    : organizations;
+  const availableOrganizations = organizations;
 
   // Statistics
   const totalMasullar = filteredMasullar.length;
@@ -186,11 +196,10 @@ export function MasullarPage() {
     showToast("Mas'ul hodim muvaffaqiyatli tahrirlandi", "success");
   };
 
-  const handleDeleteMasul = (masul: Masul) => {
-    if (confirm(`"${masul.fullName}" mas'ul hodimni o'chirishni tasdiqlaysizmi?`)) {
-      deleteMasul(masul.id);
-      showToast("Mas'ul hodim o'chirildi", "success");
-    }
+  const handleDeleteMasul = () => {
+    if (!deleteCandidate) return;
+    deleteMasul(deleteCandidate.id);
+    setDeleteCandidate(null);
   };
 
   return (
@@ -284,7 +293,7 @@ export function MasullarPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Barcha tashkilotlar</SelectItem>
-                {availableOrganizations.map((org) => (
+                {availableOrganizations.filter((org) => org.id).map((org) => (
                   <SelectItem key={org.id} value={org.id}>
                     {org.name}
                   </SelectItem>
@@ -387,7 +396,7 @@ export function MasullarPage() {
                           {isAdmin && (
                             <DropdownMenuItem
                               className="text-destructive"
-                              onClick={() => handleDeleteMasul(masul)}
+                              onClick={() => setDeleteCandidate(masul)}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               O'chirish
@@ -401,6 +410,7 @@ export function MasullarPage() {
               )}
             </TableBody>
           </Table>
+          <ResourcePagination resource="masullar" />
         </CardContent>
       </Card>
 
@@ -453,7 +463,7 @@ export function MasullarPage() {
                     <SelectValue placeholder="Tashkilotni tanlang" />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableOrganizations.map((org) => (
+                    {availableOrganizations.filter((org) => org.id).map((org) => (
                       <SelectItem key={org.id} value={org.id}>
                         {org.name}
                       </SelectItem>
@@ -589,12 +599,12 @@ export function MasullarPage() {
                 )}
                 <div className="grid gap-2">
                   <Label htmlFor="edit-organizationId">Tashkilot</Label>
-                  <Select name="organizationId" defaultValue={selectedMasul.organizationId}>
+                  <Select name="organizationId" defaultValue={selectedMasul.organizationId || undefined}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableOrganizations.map((org) => (
+                      {availableOrganizations.filter((org) => org.id).map((org) => (
                         <SelectItem key={org.id} value={org.id}>
                           {org.name}
                         </SelectItem>
@@ -613,6 +623,34 @@ export function MasullarPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(deleteCandidate)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteCandidate(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mas'ul hodimni o'chirish</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteCandidate
+                ? `"${deleteCandidate.fullName}" mas'ul hodimni o'chirishni tasdiqlaysizmi?`
+                : ""}
+              Bu amalni ortga qaytarib bo'lmaydi.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Bekor qilish</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteMasul}
+            >
+              O'chirish
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

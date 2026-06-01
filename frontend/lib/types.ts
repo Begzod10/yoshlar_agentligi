@@ -61,6 +61,7 @@ export interface Youth {
   districtId: ToshkentDistrict; // Required district
   phone: string;
   category: string;
+  notes?: string;
   status: "active" | "inactive" | "graduated" | "removed";
   assignedMasulId?: string;
   assignedMasulName?: string;

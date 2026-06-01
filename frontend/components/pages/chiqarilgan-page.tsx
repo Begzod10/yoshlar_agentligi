@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { usePageDataContext } from "@/lib/page-data-context";
+import { ResourcePagination } from "@/components/app/resource-pagination";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,34 +53,28 @@ export function ChiqarilganPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [districtFilter, setDistrictFilter] = useState<string>("all");
-  const [reasonFilter, setReasonFilter] = useState<string>("all");
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [selectedYouth, setSelectedYouth] = useState<typeof youth[0] | null>(null);
+  const pageData = usePageDataContext();
+  const effectiveDistrict =
+    isTashkilotDirektor && currentUser?.districtId
+      ? currentUser.districtId
+      : districtFilter !== "all"
+        ? districtFilter
+        : selectedDistrict !== "all"
+          ? selectedDistrict
+          : undefined;
 
-  // Get graduated youth (removed from program)
-  const graduatedYouth = youth.filter((y) => y.status === "graduated");
+  useEffect(() => {
+    pageData?.setResourceParams("youth", {
+      districtId: effectiveDistrict,
+      search: searchQuery.trim() || undefined,
+      status: "graduated",
+    });
+  }, [effectiveDistrict, pageData, searchQuery]);
 
-  // Filter based on role and selection
-  let filteredYouth = graduatedYouth.filter((y) => {
-    // Role-based filtering
-    if (isTashkilotDirektor && currentUser?.districtId) {
-      if (y.districtId !== currentUser.districtId) return false;
-    }
-
-    // Global district filter
-    if (selectedDistrict && y.districtId !== selectedDistrict) return false;
-
-    // Local filters
-    if (districtFilter !== "all" && y.districtId !== districtFilter) return false;
-    if (reasonFilter !== "all" && y.removalReason !== reasonFilter) return false;
-
-    // Search filter
-    const matchesSearch =
-      y.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      y.address.toLowerCase().includes(searchQuery.toLowerCase());
-
-    return matchesSearch;
-  });
+  const graduatedYouth = youth;
+  const filteredYouth = youth;
 
   // Get available districts
   const availableDistricts = isTashkilotDirektor && currentUser?.districtId
@@ -206,7 +202,7 @@ export function ChiqarilganPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Ism yoki manzil bo'yicha qidirish..."
+                placeholder="Ism bo'yicha qidirish..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -227,19 +223,6 @@ export function ChiqarilganPage() {
                 </SelectContent>
               </Select>
             )}
-            <Select value={reasonFilter} onValueChange={setReasonFilter}>
-              <SelectTrigger className="w-full md:w-[180px]">
-                <SelectValue placeholder="Sabab" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Barcha sabablar</SelectItem>
-                {removalReasons.map((reason) => (
-                  <SelectItem key={reason} value={reason!}>
-                    {reason}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
         </CardContent>
       </Card>
@@ -314,6 +297,7 @@ export function ChiqarilganPage() {
               )}
             </TableBody>
           </Table>
+          <ResourcePagination resource="youth" />
         </CardContent>
       </Card>
 

@@ -2,8 +2,10 @@
 
 import React from "react"
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { usePageDataContext } from "@/lib/page-data-context";
+import { ResourcePagination } from "@/components/app/resource-pagination";
 import type { IndividualPlan } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -44,7 +56,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Search,
   Plus,
   MoreHorizontal,
   Eye,
@@ -80,12 +91,24 @@ export function RejalarPage() {
   const canAdd = isAdmin || isDirektor || isTashkilotDirektor || isMasul;
   const canEdit = isAdmin || isDirektor || isTashkilotDirektor || isMasul;
 
-  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<IndividualPlan | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<IndividualPlan | null>(null);
+  const pageData = usePageDataContext();
+
+  useEffect(() => {
+    pageData?.setResourceParams("plans", {
+      status:
+        statusFilter === "all"
+          ? undefined
+          : statusFilter === "planned"
+            ? "draft"
+            : statusFilter,
+    });
+  }, [pageData, statusFilter]);
 
   // Get youth for district
   const filteredYouth = youth.filter((y) => {
@@ -93,33 +116,13 @@ export function RejalarPage() {
     if (isTashkilotDirektor && currentUser?.districtId) {
       return y.districtId === currentUser.districtId;
     }
-    if (selectedDistrict) return y.districtId === selectedDistrict;
+    if (selectedDistrict !== "all") return y.districtId === selectedDistrict;
     return true;
   });
 
   const youthIds = filteredYouth.map((y) => y.id);
 
-  // Filter plans based on role and selection
-  let filteredPlans = plans.filter((p) => {
-    // Role-based filtering
-    if (isMasul) {
-      if (p.masulId !== currentUser?.id) return false;
-    } else if (isTashkilotDirektor && currentUser?.districtId) {
-      if (!youthIds.includes(p.youthId)) return false;
-    } else if (selectedDistrict) {
-      if (!youthIds.includes(p.youthId)) return false;
-    }
-
-    // Status filter
-    if (statusFilter !== "all" && p.status !== statusFilter) return false;
-
-    // Search filter
-    const matchesSearch =
-      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.youthName.toLowerCase().includes(searchQuery.toLowerCase());
-
-    return matchesSearch;
-  });
+  const filteredPlans = plans;
 
   // Statistics
   const totalPlans = filteredPlans.length;
@@ -198,11 +201,10 @@ export function RejalarPage() {
     showToast("Reja holati yangilandi", "success");
   };
 
-  const handleDeletePlan = (plan: IndividualPlan) => {
-    if (confirm(`"${plan.title}" rejasini o'chirishni tasdiqlaysizmi?`)) {
-      deletePlan(plan.id);
-      showToast("Reja o'chirildi", "success");
-    }
+  const handleDeletePlan = () => {
+    if (!deleteCandidate) return;
+    deletePlan(deleteCandidate.id);
+    setDeleteCandidate(null);
   };
 
   return (
@@ -278,22 +280,13 @@ export function RejalarPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Reja nomi yoki yosh nomi bo'yicha qidirish..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-full md:w-[180px]">
                 <SelectValue placeholder="Holat" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Barcha holatlar</SelectItem>
-                <SelectItem value="pending">Kutilmoqda</SelectItem>
+                <SelectItem value="planned">Qoralama</SelectItem>
                 <SelectItem value="in_progress">Jarayonda</SelectItem>
                 <SelectItem value="completed">Bajarilgan</SelectItem>
                 <SelectItem value="cancelled">Bekor qilingan</SelectItem>
@@ -401,7 +394,7 @@ export function RejalarPage() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive"
-                                onClick={() => handleDeletePlan(plan)}
+                                onClick={() => setDeleteCandidate(plan)}
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 O'chirish
@@ -416,6 +409,7 @@ export function RejalarPage() {
               )}
             </TableBody>
           </Table>
+          <ResourcePagination resource="plans" />
         </CardContent>
       </Card>
 
@@ -438,38 +432,40 @@ export function RejalarPage() {
                 <Label htmlFor="description">Tavsif</Label>
                 <Textarea id="description" name="description" placeholder="Reja haqida qisqacha ma'lumot" />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="youthId">Yosh</Label>
-                <Select name="youthId" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Yoshni tanlang" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredYouth.map((y) => (
-                      <SelectItem key={y.id} value={y.id}>
-                        {y.fullName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {!isMasul && (
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="masulId">Mas'ul hodim</Label>
-                  <Select name="masulId" required>
+                  <Label htmlFor="youthId">Yosh</Label>
+                  <Select name="youthId" required>
                     <SelectTrigger>
-                      <SelectValue placeholder="Mas'ulni tanlang" />
+                      <SelectValue placeholder="Yoshni tanlang" />
                     </SelectTrigger>
                     <SelectContent>
-                      {masullar.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.fullName}
+                      {filteredYouth.filter((y) => y.id).map((y) => (
+                        <SelectItem key={y.id} value={y.id}>
+                          {y.fullName}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
+                {!isMasul && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="masulId">Mas'ul hodim</Label>
+                    <Select name="masulId" required>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Mas'ulni tanlang" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {masullar.filter((m) => m.id).map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.fullName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="startDate">Boshlanish sanasi</Label>
@@ -538,6 +534,32 @@ export function RejalarPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(deleteCandidate)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteCandidate(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rejani o'chirish</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteCandidate ? `"${deleteCandidate.title}" rejasini o'chirishni tasdiqlaysizmi?` : ""}
+              Bu amalni ortga qaytarib bo'lmaydi.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Bekor qilish</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeletePlan}
+            >
+              O'chirish
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
