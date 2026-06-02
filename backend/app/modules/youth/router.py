@@ -1,136 +1,147 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
-from app.core.constants import YouthStatus
-from app.core.deps import CurrentUserDep, DbSession
+from app.core.audit_context import AuditDep
+from app.core.constants import UserRole
+from app.core.deps import CurrentUser, DbSession
+from app.middleware.rbac import require_role
+from app.modules.masullar.repository import MasullarRepository
 from app.modules.youth.repository import YouthRepository
 from app.modules.youth.schemas import (
-    ApproveRemovalRequest,
-    AssignMasulRequest,
-    ProposeRemovalRequest,
-    RejectRemovalRequest,
-    StatusChangeRequest,
+    YouthAssignMasul,
     YouthCreate,
     YouthRead,
+    YouthStatusUpdate,
     YouthUpdate,
     YouthUpdateByMasul,
 )
 from app.modules.youth.service import YouthService
-from app.core.constants import UserRole
+from app.utils.pagination import Page, PageParams
 
 router = APIRouter(prefix="/api/youth", tags=["youth"])
 
+_ROLES = (
+    UserRole.ADMIN,
+    UserRole.DIREKTOR,
+    UserRole.TASHKILOT_DIREKTORI,
+    UserRole.MASUL_HODIM,
+)
+Access = Annotated[CurrentUser, Depends(require_role(*_ROLES))]
+
 
 def _service(session: DbSession) -> YouthService:
-    return YouthService(session, YouthRepository(session))
+    return YouthService(YouthRepository(session), MasullarRepository(session))
 
 
-@router.get("")
+@router.get("", response_model=Page[YouthRead])
 async def list_youth(
+    current: Access,
     session: DbSession,
-    user: CurrentUserDep,
-    district_id: str | None = None,
-    youth_status: YouthStatus | None = Query(None, alias="status"),
-    search: str | None = None,
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
-) -> dict:
-    return await _service(session).list(
-        user, district_id=district_id, status=youth_status,
-        search=search, page=page, limit=limit,
+    district_id: str | None = Query(default=None),
+    masul_id: UUID | None = Query(default=None),
+    status: str | None = Query(default=None),
+    search: str | None = Query(default=None, min_length=1, max_length=255),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=200),
+) -> Page[YouthRead]:
+    params = PageParams(page=page, limit=limit)
+    items, total = await YouthRepository(session).list_for_scope(
+        current,
+        district_id=district_id,
+        masul_id=masul_id,
+        status=status,
+        search=search,
+        params=params,
+    )
+    return Page.build(
+        items=[YouthRead.model_validate(y) for y in items], total=total, params=params
     )
 
 
 @router.post("", response_model=YouthRead, status_code=status.HTTP_201_CREATED)
 async def create_youth(
-    body: YouthCreate, session: DbSession, user: CurrentUserDep,
+    payload: YouthCreate, current: Access, session: DbSession, audit: AuditDep
 ) -> YouthRead:
-    service = _service(session)
-    result = await service.create(body, user)
+    youth = await _service(session).create(current, payload)
+    await audit.record(
+        "youth.create", "youth", youth.id,
+        after=YouthRead.model_validate(youth).model_dump(mode="json"),
+    )
     await session.commit()
-    return result
-
-
-@router.get("/removals")
-async def list_pending_removals(
-    session: DbSession,
-    user: CurrentUserDep,
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
-) -> dict:
-    return await _service(session).list_pending_removals(user, page=page, limit=limit)
+    return YouthRead.model_validate(youth)
 
 
 @router.get("/{youth_id}", response_model=YouthRead)
 async def get_youth(
-    youth_id: UUID, session: DbSession, user: CurrentUserDep,
+    youth_id: UUID, current: Access, session: DbSession
 ) -> YouthRead:
-    return await _service(session).get(youth_id, user)
+    youth = await _service(session).get(current, youth_id)
+    return YouthRead.model_validate(youth)
 
 
 @router.patch("/{youth_id}", response_model=YouthRead)
 async def update_youth(
-    youth_id: UUID, body: YouthUpdate, session: DbSession, user: CurrentUserDep,
+    youth_id: UUID,
+    payload: YouthUpdate,
+    current: Access,
+    session: DbSession,
+    audit: AuditDep,
 ) -> YouthRead:
-    service = _service(session)
-    if user.role == UserRole.MASUL_HODIM:
-        masul_data = YouthUpdateByMasul(**body.model_dump(include={"contact", "notes"}, exclude_unset=True))
-        result = await service.update(youth_id, masul_data, user)
-    else:
-        result = await service.update(youth_id, body, user)
+    # masul_hodim is restricted to YouthUpdateByMasul (only contact + notes)
+    effective: YouthUpdate | YouthUpdateByMasul = payload
+    if current.role == UserRole.MASUL_HODIM:
+        effective = YouthUpdateByMasul(
+            **payload.model_dump(include={"contact", "notes"}, exclude_unset=True)
+        )
+    youth = await _service(session).update(current, youth_id, effective)
+    await audit.record(
+        "youth.update", "youth", youth_id,
+        before=effective.model_dump(exclude_unset=True, mode="json"),
+        after=YouthRead.model_validate(youth).model_dump(mode="json"),
+    )
     await session.commit()
-    return result
-
-
-@router.delete("/{youth_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_youth(
-    youth_id: UUID, session: DbSession, user: CurrentUserDep,
-) -> None:
-    await _service(session).delete(youth_id, user)
-    await session.commit()
+    return YouthRead.model_validate(youth)
 
 
 @router.post("/{youth_id}/assign-masul", response_model=YouthRead)
 async def assign_masul(
-    youth_id: UUID, body: AssignMasulRequest, session: DbSession, user: CurrentUserDep,
+    youth_id: UUID,
+    payload: YouthAssignMasul,
+    current: Access,
+    session: DbSession,
+    audit: AuditDep,
 ) -> YouthRead:
-    result = await _service(session).assign_masul(youth_id, body, user)
+    youth = await _service(session).assign_masul(current, youth_id, payload.masul_id)
+    await audit.record(
+        "youth.assign_masul", "youth", youth_id,
+        after={"masul_id": str(payload.masul_id)},
+    )
     await session.commit()
-    return result
+    return YouthRead.model_validate(youth)
 
 
 @router.post("/{youth_id}/status", response_model=YouthRead)
-async def change_status(
-    youth_id: UUID, body: StatusChangeRequest, session: DbSession, user: CurrentUserDep,
+async def set_youth_status(
+    youth_id: UUID,
+    payload: YouthStatusUpdate,
+    current: Access,
+    session: DbSession,
+    audit: AuditDep,
 ) -> YouthRead:
-    result = await _service(session).change_status(youth_id, body.status, user, body.reason)
+    youth = await _service(session).set_status(current, youth_id, payload.status)
+    await audit.record(
+        "youth.set_status", "youth", youth_id, after={"status": payload.status.value}
+    )
     await session.commit()
-    return result
+    return YouthRead.model_validate(youth)
 
 
-@router.post("/{youth_id}/propose-removal", response_model=YouthRead)
-async def propose_removal(
-    youth_id: UUID, body: ProposeRemovalRequest, session: DbSession, user: CurrentUserDep,
-) -> YouthRead:
-    result = await _service(session).propose_removal(youth_id, body, user)
+@router.delete("/{youth_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_youth(
+    youth_id: UUID, current: Access, session: DbSession, audit: AuditDep
+) -> None:
+    await _service(session).soft_delete(current, youth_id)
+    await audit.record("youth.delete", "youth", youth_id)
     await session.commit()
-    return result
-
-
-@router.post("/{youth_id}/approve-removal", response_model=YouthRead)
-async def approve_removal(
-    youth_id: UUID, session: DbSession, user: CurrentUserDep,
-) -> YouthRead:
-    result = await _service(session).approve_removal(youth_id, user)
-    await session.commit()
-    return result
-
-
-@router.post("/{youth_id}/reject-removal", response_model=YouthRead)
-async def reject_removal(
-    youth_id: UUID, body: RejectRemovalRequest, session: DbSession, user: CurrentUserDep,
-) -> YouthRead:
-    result = await _service(session).reject_removal(youth_id, body, user)
-    await session.commit()
-    return result

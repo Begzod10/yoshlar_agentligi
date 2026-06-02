@@ -39,6 +39,7 @@ class TokenPayload(BaseModel):
     type: TokenType
     exp: int
     iat: int
+    sid: str | None = None  # session ID for device tracking
 
 
 def _create_token(
@@ -47,6 +48,7 @@ def _create_token(
     role: UserRole | str,
     district_id: str | None,
     token_type: TokenType,
+    sid: UUID | str | None = None,
 ) -> str:
     settings = get_settings()
     now = datetime.now(tz=UTC)
@@ -64,19 +66,29 @@ def _create_token(
         "iat": int(now.timestamp()),
         "exp": int((now + ttl).timestamp()),
     }
+    if sid is not None:
+        payload["sid"] = str(sid)
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
 def create_access_token(
-    *, sub: UUID | str, role: UserRole | str, district_id: str | None = None
+    *,
+    sub: UUID | str,
+    role: UserRole | str,
+    district_id: str | None = None,
+    sid: UUID | str | None = None,
 ) -> str:
-    return _create_token(sub=sub, role=role, district_id=district_id, token_type="access")
+    return _create_token(sub=sub, role=role, district_id=district_id, token_type="access", sid=sid)
 
 
 def create_refresh_token(
-    *, sub: UUID | str, role: UserRole | str, district_id: str | None = None
+    *,
+    sub: UUID | str,
+    role: UserRole | str,
+    district_id: str | None = None,
+    sid: UUID | str | None = None,
 ) -> str:
-    return _create_token(sub=sub, role=role, district_id=district_id, token_type="refresh")
+    return _create_token(sub=sub, role=role, district_id=district_id, token_type="refresh", sid=sid)
 
 
 def decode_token(token: str) -> TokenPayload:

@@ -8,7 +8,15 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.modules.users import models as _users_models  # noqa: F401  (register tables)
+from app.admin.backups import models as _backup_models  # noqa: F401  (register tables)
+from app.modules.audit import models as _audit_models  # noqa: F401
+from app.modules.flags import models as _flags_models  # noqa: F401
+from app.modules.masullar import models as _masullar_models  # noqa: F401
+from app.modules.meetings import models as _meetings_models  # noqa: F401
+from app.modules.organizations import models as _orgs_models  # noqa: F401
+from app.modules.plans import models as _plans_models  # noqa: F401
+from app.modules.users import models as _users_models  # noqa: F401
+from app.modules.youth import models as _youth_models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
