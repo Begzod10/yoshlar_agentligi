@@ -20,6 +20,8 @@ class MeetingUpdate(BaseModel):
     type: str | None = Field(default=None, max_length=64)
     location: str | None = Field(default=None, max_length=255)
     agenda: str | None = Field(default=None, max_length=2000)
+    attendance_status: MeetingAttendance | None = None
+    attendance_notes: str | None = Field(default=None, max_length=2000)
 
 
 class AttendanceUpdate(BaseModel):
