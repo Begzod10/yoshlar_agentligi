@@ -1,6 +1,11 @@
 "use client";
 
 import { useApp } from "@/lib/app-context";
+import {
+  useAgencyStats,
+  useCategoryStats,
+  useRecentActivity,
+} from "@/lib/api/hooks/use-core-api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -79,9 +84,12 @@ export function DashboardPage() {
   const isTashkilotDirektor = currentUser?.role === "tashkilot_direktori";
   const isMasul = currentUser?.role === "masul_hodim";
   const isModerator = currentUser?.role === "moderator";
+  const agencyStatsQuery = useAgencyStats(isAdmin || isDirektor || isModerator);
+  const categoryStatsQuery = useCategoryStats(isAdmin || isDirektor || isModerator);
+  const recentActivityQuery = useRecentActivity(6, isAdmin || isDirektor || isModerator);
 
   // Calculate aggregate stats
-  const totalStats = districtStats.reduce(
+  const fallbackTotalStats = districtStats.reduce(
     (acc, d) => ({
       totalYouth: acc.totalYouth + d.totalYouth,
       activeYouth: acc.activeYouth + d.activeYouth,
@@ -103,6 +111,18 @@ export function DashboardPage() {
       totalMeetings: 0,
     }
   );
+  const totalStats = agencyStatsQuery.data
+    ? {
+        totalYouth: agencyStatsQuery.data.totalYouth,
+        activeYouth: agencyStatsQuery.data.activeYouth,
+        graduatedYouth: agencyStatsQuery.data.graduatedYouth,
+        totalOrganizations: agencyStatsQuery.data.totalOrganizations,
+        totalMasullar: agencyStatsQuery.data.totalMasullar,
+        totalPlans: agencyStatsQuery.data.totalPlans,
+        completedPlans: agencyStatsQuery.data.completedPlans,
+        totalMeetings: agencyStatsQuery.data.totalMeetings,
+      }
+    : fallbackTotalStats;
 
   const overallCompletionRate =
     totalStats.totalPlans > 0
@@ -124,11 +144,17 @@ export function DashboardPage() {
   visibleYouth.forEach((y) => {
     categoryMap.set(y.category, (categoryMap.get(y.category) || 0) + 1);
   });
-  const categoryData = Array.from(categoryMap.entries()).map(([name, value], index) => ({
-    name,
-    value,
-    color: categoryColors[index % categoryColors.length],
-  }));
+  const categoryData =
+    categoryStatsQuery.data?.map((item, index) => ({
+      name: item.category,
+      value: item.totalYouth,
+      color: categoryColors[index % categoryColors.length],
+    })) ??
+    Array.from(categoryMap.entries()).map(([name, value], index) => ({
+      name,
+      value,
+      color: categoryColors[index % categoryColors.length],
+    }));
 
   // District comparison data for bar chart
   const districtChartData = districtStats
@@ -165,6 +191,7 @@ export function DashboardPage() {
     { month: "May", yoshlar: 72, rejalar: 56, uchrashuvlar: 124 },
     { month: "Iyn", yoshlar: 68, rejalar: 52, uchrashuvlar: 118 },
   ];
+  const recentActivities = recentActivityQuery.data ?? [];
 
   const getDashboardTitle = () => {
     if (currentUser?.role === "tashkilot_direktori" && currentUser.districtId) {
@@ -739,7 +766,28 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {visibleMeetings
+              {recentActivities.length > 0
+                ? recentActivities.map((activity) => (
+                    <div key={activity.id} className="flex items-start gap-3">
+                      <div className="h-8 w-8 rounded-full bg-accent/10 flex items-center justify-center mt-0.5">
+                        <Activity className="h-4 w-4 text-accent" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm">{activity.action}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {activity.entityType} · {activity.role} ·{" "}
+                          {new Intl.DateTimeFormat("uz-UZ", {
+                            year: "numeric",
+                            month: "short",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }).format(new Date(activity.createdAt))}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                : visibleMeetings
                 .filter((m) => m.status === "completed")
                 .slice(0, 4)
                 .map((meeting) => {
@@ -759,7 +807,7 @@ export function DashboardPage() {
                     </div>
                   );
                 })}
-              {visibleMeetings.filter((m) => m.status === "completed").length === 0 && (
+              {recentActivities.length === 0 && visibleMeetings.filter((m) => m.status === "completed").length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Hozircha yakunlangan uchrashuvlar yo'q
                 </p>

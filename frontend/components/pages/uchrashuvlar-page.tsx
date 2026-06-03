@@ -4,6 +4,7 @@ import React from "react"
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { downloadReport } from "@/lib/api/hooks/use-core-api";
 import { ResourcePagination } from "@/components/app/resource-pagination";
 import type { Meeting } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -105,6 +106,21 @@ export function UchrashuvlarPage() {
   });
 
   const filteredMeetings = meetings;
+  const reportDistrict =
+    isTashkilotDirektor && currentUser?.districtId
+      ? currentUser.districtId
+      : selectedDistrict !== "all"
+        ? selectedDistrict
+        : undefined;
+
+  const handleExport = () => {
+    void downloadReport
+      .meetings(reportDistrict)
+      .then(() => showToast("Export yuklab olindi", "success"))
+      .catch((error) =>
+        showToast(error instanceof Error ? error.message : "Export yuklanmadi", "error")
+      );
+  };
 
   // Statistics
   const totalMeetings = filteredMeetings.length;
@@ -284,7 +300,7 @@ export function UchrashuvlarPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleExport}>
               <Download className="mr-2 h-4 w-4" />
               Export
             </Button>

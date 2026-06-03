@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
-import { downloadReport } from "@/lib/api/hooks/use-core-api";
+import {
+  downloadReport,
+  useMonitoringDistricts,
+  useMonitoringMasullar,
+  useMonitoringOrganizations,
+  useMonitoringOverview,
+} from "@/lib/api/hooks/use-core-api";
+import type { MonitoringPeriod } from "@/lib/api/types";
 import { TOSHKENT_VILOYATI_DISTRICTS, type ToshkentDistrict } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,53 +77,103 @@ const COLORS = [
 
 export function MonitoringPage() {
   const {
-    currentUser,
     selectedDistrict,
-    setSelectedDistrict,
     getDistrictStats,
     getVisibleOrganizations,
     getVisibleMasullar,
-    canViewAllDistricts,
+    showToast,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState("tumanlar");
-  const [periodFilter, setPeriodFilter] = useState("month");
+  const [periodFilter, setPeriodFilter] = useState<MonitoringPeriod>("month");
 
-  const districtStats = getDistrictStats();
+  const overviewQuery = useMonitoringOverview(periodFilter);
+  const monitoringDistrictsQuery = useMonitoringDistricts(periodFilter);
+  const monitoringOrganizationsQuery = useMonitoringOrganizations(periodFilter);
+  const monitoringMasullarQuery = useMonitoringMasullar(periodFilter);
+
+  const fallbackDistrictStats = getDistrictStats();
   const organizations = getVisibleOrganizations();
   const masullar = getVisibleMasullar();
+  const apiDistricts = monitoringDistrictsQuery.data ?? [];
+  const apiOrganizations = monitoringOrganizationsQuery.data ?? [];
+  const apiMasullar = monitoringMasullarQuery.data ?? [];
+  const districtFilter = selectedDistrict === "all" ? null : selectedDistrict;
 
   // District rankings with scores
-  const districtRankings = districtStats
-    .map((d) => ({
-      ...d,
-      overallScore: Math.round(
-        (d.completionRate * 0.4 + d.averageAiScore * 0.3 + (d.totalMeetings / Math.max(d.totalYouth, 1)) * 30)
-      ),
-    }))
-    .sort((a, b) => b.overallScore - a.overallScore)
+  const districtRankings = (apiDistricts.length > 0
+    ? apiDistricts.map((d) => ({
+        districtId: d.districtId,
+        totalYouth: d.totalYouth,
+        totalMasullar: d.totalMasullar,
+        totalPlans: d.totalPlans,
+        totalMeetings: d.totalMeetings,
+        completedPlans: Math.round((d.totalPlans * d.bajarilishPct) / 100),
+        completionRate: d.bajarilishPct,
+        averageAiScore: d.aiBall,
+        overallScore: Math.round(d.umumiyBall),
+        rank: d.rank,
+      }))
+    : fallbackDistrictStats
+        .map((d) => ({
+          ...d,
+          overallScore: Math.round(
+            d.completionRate * 0.4 +
+              d.averageAiScore * 0.3 +
+              (d.totalMeetings / Math.max(d.totalYouth, 1)) * 30
+          ),
+        }))
+        .sort((a, b) => b.overallScore - a.overallScore)
+  )
+    .filter((d) => !districtFilter || d.districtId === districtFilter)
     .map((d, index) => ({ ...d, rank: index + 1 }));
 
   // Organization ratings
-  const orgRatings = organizations
-    .map((org) => {
-      const stats = districtStats.find((d) => d.districtId === org.districtId);
-      return {
+  const orgRatings = (apiOrganizations.length > 0
+    ? apiOrganizations.map((org) => ({
         id: org.id,
         name: org.name,
         districtId: org.districtId,
-        masullarCount: org.masullarCount,
-        yoshlarCount: org.yoshlarCount,
-        score: stats ? Math.round(stats.averageAiScore) : 70,
-        completionRate: stats ? Math.round(stats.completionRate) : 60,
-      };
-    })
-    .sort((a, b) => b.score - a.score)
+        masullarCount: org.totalMasullar,
+        yoshlarCount: org.totalYouth,
+        score: Math.round(org.aiBall),
+        completionRate: Math.round(org.bajarilishPct),
+        rank: org.rank,
+      }))
+    : organizations
+        .map((org) => {
+          const stats = fallbackDistrictStats.find((d) => d.districtId === org.districtId);
+          return {
+            id: org.id,
+            name: org.name,
+            districtId: org.districtId,
+            masullarCount: org.masullarCount,
+            yoshlarCount: org.yoshlarCount,
+            score: stats ? Math.round(stats.averageAiScore) : 70,
+            completionRate: stats ? Math.round(stats.completionRate) : 60,
+          };
+        })
+        .sort((a, b) => b.score - a.score)
+  )
+    .filter((org) => !districtFilter || org.districtId === districtFilter)
     .map((org, index) => ({ ...org, rank: index + 1 }));
 
   // Masul ratings
-  const masulRatings = masullar
-    .sort((a, b) => b.aiScore - a.aiScore)
+  const masulRatings = (apiMasullar.length > 0
+    ? apiMasullar.map((masul) => ({
+        id: masul.id,
+        fullName: masul.fullName,
+        email: "",
+        districtId: masul.districtId,
+        assignedYouthCount: masul.totalYouth,
+        completedPlansCount: Math.round((masul.totalPlans * masul.bajarilishPct) / 100),
+        meetingsCount: masul.totalMeetings,
+        aiScore: Math.round(masul.aiBall),
+        rank: masul.rank,
+      }))
+    : masullar.sort((a, b) => b.aiScore - a.aiScore)
+  )
+    .filter((masul) => !districtFilter || masul.districtId === districtFilter)
     .map((m, index) => ({
       ...m,
       rank: index + 1,
@@ -132,31 +189,33 @@ export function MonitoringPage() {
 
   // Pie chart data for overall distribution
   const pieData = [
-    { name: "Faol yoshlar", value: districtStats.reduce((acc, d) => acc + d.activeYouth, 0) },
-    { name: "Yakunlangan", value: districtStats.reduce((acc, d) => acc + d.graduatedYouth, 0) },
+    { name: "Faol yoshlar", value: fallbackDistrictStats.reduce((acc, d) => acc + d.activeYouth, 0) },
+    { name: "Yakunlangan", value: fallbackDistrictStats.reduce((acc, d) => acc + d.graduatedYouth, 0) },
   ];
 
   // Radar chart data for overall performance
+  const radarSource = districtRankings.length > 0 ? districtRankings : fallbackDistrictStats;
+  const radarCount = Math.max(radarSource.length, 1);
   const radarData = [
     {
       subject: "Rejalar",
-      value: Math.round(districtStats.reduce((acc, d) => acc + d.completionRate, 0) / districtStats.length),
+      value: Math.round(radarSource.reduce((acc, d) => acc + d.completionRate, 0) / radarCount),
     },
     {
       subject: "Uchrashuvlar",
-      value: Math.min(100, Math.round(districtStats.reduce((acc, d) => acc + d.totalMeetings, 0) / districtStats.length)),
+      value: Math.min(100, Math.round(radarSource.reduce((acc, d) => acc + d.totalMeetings, 0) / radarCount)),
     },
     {
       subject: "AI ball",
-      value: Math.round(districtStats.reduce((acc, d) => acc + d.averageAiScore, 0) / districtStats.length),
+      value: Math.round(radarSource.reduce((acc, d) => acc + d.averageAiScore, 0) / radarCount),
     },
     {
       subject: "Qamrov",
-      value: Math.round((districtStats.filter((d) => d.totalYouth > 0).length / districtStats.length) * 100),
+      value: Math.round((radarSource.filter((d) => d.totalYouth > 0).length / radarCount) * 100),
     },
     {
       subject: "Mas'ullar",
-      value: Math.round((districtStats.reduce((acc, d) => acc + d.totalMasullar, 0) / districtStats.length) * 10),
+      value: Math.round((radarSource.reduce((acc, d) => acc + d.totalMasullar, 0) / radarCount) * 10),
     },
   ];
 
@@ -192,11 +251,12 @@ export function MonitoringPage() {
     return <span className="text-muted-foreground">{rank}-o'rin</span>;
   };
 
-  const totalYouth = districtStats.reduce((acc, d) => acc + d.totalYouth, 0);
-  const totalMasullar = districtStats.reduce((acc, d) => acc + d.totalMasullar, 0);
-  const totalOrganizations = districtStats.reduce((acc, d) => acc + d.totalOrganizations, 0);
+  const totalYouth = overviewQuery.data?.totalYouth ?? districtRankings.reduce((acc, d) => acc + d.totalYouth, 0);
+  const totalMasullar = overviewQuery.data?.totalMasullar ?? districtRankings.reduce((acc, d) => acc + d.totalMasullar, 0);
+  const totalDistricts = overviewQuery.data?.totalDistricts ?? TOSHKENT_VILOYATI_DISTRICTS.length;
   const avgCompletionRate = Math.round(
-    districtStats.reduce((acc, d) => acc + d.completionRate, 0) / districtStats.length
+    overviewQuery.data?.avgBajarilishPct ??
+      (radarSource.reduce((acc, d) => acc + d.completionRate, 0) / radarCount)
   );
 
   return (
@@ -212,7 +272,7 @@ export function MonitoringPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={periodFilter} onValueChange={setPeriodFilter}>
+          <Select value={periodFilter} onValueChange={(value) => setPeriodFilter(value as MonitoringPeriod)}>
             <SelectTrigger className="w-[150px]">
               <SelectValue />
             </SelectTrigger>
@@ -227,10 +287,18 @@ export function MonitoringPage() {
             variant="outline"
             className="bg-transparent"
             onClick={() => {
-              if (selectedDistrict === "all") {
-                void downloadReport.agency();
-              } else {
-                void downloadReport.district(selectedDistrict);
+              try {
+                if (selectedDistrict === "all") {
+                  void downloadReport.agency().catch((error) => {
+                    showToast(error instanceof Error ? error.message : "Hisobot yuklanmadi", "error");
+                  });
+                } else {
+                  void downloadReport.district(selectedDistrict).catch((error) => {
+                    showToast(error instanceof Error ? error.message : "Hisobot yuklanmadi", "error");
+                  });
+                }
+              } catch (error) {
+                showToast(error instanceof Error ? error.message : "Hisobot yuklanmadi", "error");
               }
             }}
           >
@@ -260,7 +328,7 @@ export function MonitoringPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Tumanlar</p>
-                <p className="text-2xl font-bold">{TOSHKENT_VILOYATI_DISTRICTS.length}</p>
+                <p className="text-2xl font-bold">{totalDistricts}</p>
               </div>
               <div className="h-12 w-12 rounded-lg bg-accent/10 flex items-center justify-center">
                 <MapPin className="h-6 w-6 text-accent" />
@@ -415,7 +483,7 @@ export function MonitoringPage() {
                     <TableRow key={district.districtId}>
                       <TableCell>{getRankBadge(district.rank)}</TableCell>
                       <TableCell>
-                        <DistrictBadge districtId={district.districtId} />
+                        <DistrictBadge districtId={district.districtId as ToshkentDistrict} />
                       </TableCell>
                       <TableCell className="text-center">{district.totalYouth}</TableCell>
                       <TableCell className="text-center">{district.totalMasullar}</TableCell>
@@ -547,7 +615,7 @@ export function MonitoringPage() {
                       <TableCell>{getRankBadge(org.rank)}</TableCell>
                       <TableCell className="font-medium">{org.name}</TableCell>
                       <TableCell>
-                        <DistrictBadge districtId={org.districtId} size="sm" />
+                        <DistrictBadge districtId={org.districtId as ToshkentDistrict} size="sm" />
                       </TableCell>
                       <TableCell className="text-center">{org.masullarCount}</TableCell>
                       <TableCell className="text-center">{org.yoshlarCount}</TableCell>
@@ -608,7 +676,7 @@ export function MonitoringPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold truncate">{masul.fullName}</p>
-                      <DistrictBadge districtId={masul.districtId} size="sm" className="mt-1" />
+                      <DistrictBadge districtId={masul.districtId as ToshkentDistrict} size="sm" className="mt-1" />
                       <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                         <span>{masul.assignedYouthCount} yosh</span>
                         <span>{masul.completedPlansCount} reja</span>
@@ -657,7 +725,7 @@ export function MonitoringPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <DistrictBadge districtId={masul.districtId} size="sm" />
+                        <DistrictBadge districtId={masul.districtId as ToshkentDistrict} size="sm" />
                       </TableCell>
                       <TableCell className="text-center">{masul.assignedYouthCount}</TableCell>
                       <TableCell className="text-center">{masul.completedPlansCount}</TableCell>

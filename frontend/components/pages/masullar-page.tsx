@@ -4,6 +4,7 @@ import React from "react"
 
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { downloadReport } from "@/lib/api/hooks/use-core-api";
 import { usePageDataContext } from "@/lib/page-data-context";
 import { ResourcePagination } from "@/components/app/resource-pagination";
 import type { Masul, ToshkentDistrict } from "@/lib/types";
@@ -121,6 +122,15 @@ export function MasullarPage() {
   }, [effectiveDistrict, orgFilter, pageData, searchQuery]);
 
   const filteredMasullar = masullar;
+
+  const handleExport = () => {
+    void downloadReport
+      .masullar(effectiveDistrict)
+      .then(() => showToast("Export yuklab olindi", "success"))
+      .catch((error) =>
+        showToast(error instanceof Error ? error.message : "Export yuklanmadi", "error")
+      );
+  };
 
   // Get available districts and organizations for filters
   const availableDistricts = isTashkilotDirektor && currentUser?.districtId
@@ -300,7 +310,7 @@ export function MasullarPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleExport}>
               <Download className="mr-2 h-4 w-4" />
               Export
             </Button>

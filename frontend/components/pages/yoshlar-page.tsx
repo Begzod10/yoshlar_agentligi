@@ -11,7 +11,7 @@ import {
   useForceYouthStatus,
   useRestoreYouth,
 } from "@/lib/api/hooks/use-admin";
-import { useMeetings, usePlans } from "@/lib/api/hooks/use-core-api";
+import { downloadReport, useMeetings, usePlans } from "@/lib/api/hooks/use-core-api";
 import type { Youth, ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
@@ -108,6 +108,7 @@ export function YoshlarPage() {
     removeYouth,
     validateDistrictAssignment,
     canViewAllDistricts,
+    showToast,
   } = useApp();
 
   const isAdmin = currentUser?.role === "admin";
@@ -211,6 +212,17 @@ export function YoshlarPage() {
   }, [isViewDialogOpen, selectedYouthId]);
 
   const filteredYouth = visibleYouth;
+
+  const handleExport = () => {
+    const promise = effectiveDistrict
+      ? downloadReport.district(effectiveDistrict)
+      : downloadReport.agency();
+    void promise
+      .then(() => showToast("Export yuklab olindi", "success"))
+      .catch((error) =>
+        showToast(error instanceof Error ? error.message : "Export yuklanmadi", "error")
+      );
+  };
 
   // Get masullar for the selected youth's district (for assignment)
   const getAvailableMasullar = (youth: Youth) => {
@@ -473,7 +485,7 @@ export function YoshlarPage() {
                 <SelectItem value="removed">Chiqarilgan</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" className="bg-transparent">
+            <Button variant="outline" className="bg-transparent" onClick={handleExport}>
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>

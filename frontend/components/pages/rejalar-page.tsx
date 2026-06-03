@@ -4,6 +4,7 @@ import React from "react"
 
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { downloadReport } from "@/lib/api/hooks/use-core-api";
 import { usePageDataContext } from "@/lib/page-data-context";
 import { ResourcePagination } from "@/components/app/resource-pagination";
 import type { IndividualPlan } from "@/lib/types";
@@ -123,6 +124,21 @@ export function RejalarPage() {
   const youthIds = filteredYouth.map((y) => y.id);
 
   const filteredPlans = plans;
+  const reportDistrict =
+    isTashkilotDirektor && currentUser?.districtId
+      ? currentUser.districtId
+      : selectedDistrict !== "all"
+        ? selectedDistrict
+        : undefined;
+
+  const handleExport = () => {
+    void downloadReport
+      .plans(reportDistrict)
+      .then(() => showToast("Export yuklab olindi", "success"))
+      .catch((error) =>
+        showToast(error instanceof Error ? error.message : "Export yuklanmadi", "error")
+      );
+  };
 
   // Statistics
   const totalPlans = filteredPlans.length;
@@ -292,7 +308,7 @@ export function RejalarPage() {
                 <SelectItem value="cancelled">Bekor qilingan</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleExport}>
               <Download className="mr-2 h-4 w-4" />
               Export
             </Button>

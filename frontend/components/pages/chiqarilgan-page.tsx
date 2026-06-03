@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { downloadReport } from "@/lib/api/hooks/use-core-api";
 import { usePageDataContext } from "@/lib/page-data-context";
 import { ResourcePagination } from "@/components/app/resource-pagination";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
@@ -47,6 +48,7 @@ export function ChiqarilganPage() {
     currentUser,
     youth,
     selectedDistrict,
+    showToast,
   } = useApp();
 
   const isTashkilotDirektor = currentUser?.role === "tashkilot_direktori";
@@ -135,7 +137,20 @@ export function ChiqarilganPage() {
             Dasturdan muvaffaqiyatli chiqarilgan yoshlar ro'yxati
           </p>
         </div>
-        <Button variant="outline">
+        <Button
+          variant="outline"
+          onClick={() => {
+            const reportDistrict = effectiveDistrict;
+            const promise = reportDistrict
+              ? downloadReport.district(reportDistrict)
+              : downloadReport.agency();
+            void promise
+              .then(() => showToast("Hisobot yuklab olindi", "success"))
+              .catch((error) =>
+                showToast(error instanceof Error ? error.message : "Hisobot yuklanmadi", "error")
+              );
+          }}
+        >
           <Download className="mr-2 h-4 w-4" />
           Hisobot yuklab olish
         </Button>
