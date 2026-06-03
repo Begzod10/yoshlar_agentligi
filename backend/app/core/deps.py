@@ -28,6 +28,7 @@ class CurrentUser:
     id: UUID
     role: UserRole
     district_id: str | None
+    session_id: UUID | None = None
 
 
 async def get_current_user(
@@ -42,6 +43,7 @@ async def get_current_user(
         id=UUID(payload.sub),
         role=payload.role,
         district_id=payload.district_id,
+        session_id=UUID(payload.sid) if payload.sid else None,
     )
 
 

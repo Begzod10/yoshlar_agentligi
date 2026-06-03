@@ -1,135 +1,93 @@
-import contextlib
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
-from app.core.constants import CROSS_DISTRICT_ROLES, UserRole
-from app.core.deps import CurrentUserDep, DbSession
-from app.core.exceptions import ForbiddenError, NotFoundError
-from app.modules.audit.service import record_audit
-from app.modules.masullar.models import Masul
+from app.core.audit_context import AuditDep
+from app.core.constants import UserRole
+from app.core.deps import CurrentUser, DbSession
+from app.middleware.rbac import require_role
 from app.modules.masullar.repository import MasullarRepository
 from app.modules.masullar.schemas import MasulCreate, MasulRead, MasulUpdate
+from app.modules.masullar.service import MasullarService
+from app.utils.pagination import Page, PageParams
 
 router = APIRouter(prefix="/api/masullar", tags=["masullar"])
 
-ALLOWED_ROLES = frozenset({UserRole.ADMIN, UserRole.DIREKTOR, UserRole.TASHKILOT_DIREKTORI})
+_ROLES = (UserRole.ADMIN, UserRole.DIREKTOR, UserRole.TASHKILOT_DIREKTORI)
+Access = Annotated[CurrentUser, Depends(require_role(*_ROLES))]
 
 
-def _check_access(user: CurrentUserDep) -> None:
-    if user.role not in ALLOWED_ROLES:
-        raise ForbiddenError(code="role_not_allowed")
+def _service(session: DbSession) -> MasullarService:
+    return MasullarService(MasullarRepository(session))
 
 
-@router.get("")
+@router.get("", response_model=Page[MasulRead])
 async def list_masullar(
-        session: DbSession,
-        user: CurrentUserDep,
-        district_id: str | None = None,
-        organization_id: UUID | None = None,
-        search: str | None = None,
-        page: int = Query(1, ge=1),
-        limit: int = Query(20, ge=1, le=100),
-) -> dict:
-    _check_access(user)
-    effective_district = district_id
-    if user.role == UserRole.TASHKILOT_DIREKTORI:
-        effective_district = user.district_id
-
-    repo = MasullarRepository(session)
-    offset = (page - 1) * limit
-    rows, total = await repo.list(
-        district_id=effective_district, organization_id=organization_id,
-        search=search, offset=offset, limit=limit,
+    current: Access,
+    session: DbSession,
+    district_id: str | None = Query(default=None),
+    organization_id: UUID | None = Query(default=None),
+    search: str | None = Query(default=None, min_length=1, max_length=255),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=200),
+) -> Page[MasulRead]:
+    # tashkilot_direktori forced to own district
+    if current.role == UserRole.TASHKILOT_DIREKTORI:
+        district_id = current.district_id
+    params = PageParams(page=page, limit=limit)
+    items, total = await MasullarRepository(session).list(
+        district_id=district_id,
+        organization_id=organization_id,
+        search=search,
+        params=params,
     )
-    data = []
-    for row in rows:
-        m = MasulRead.model_validate(row["masul"])
-        m.organization_name = row["organization_name"]
-        m.assigned_youth_count = row["assigned_youth_count"]
-        data.append(m)
-    return {
-        "data": data,
-        "meta": {"total": total, "page": page, "limit": limit},
-    }
+    return Page.build(
+        items=[MasulRead.model_validate(m) for m in items], total=total, params=params
+    )
 
 
 @router.post("", response_model=MasulRead, status_code=status.HTTP_201_CREATED)
 async def create_masul(
-        body: MasulCreate, session: DbSession, user: CurrentUserDep,
+    payload: MasulCreate, current: Access, session: DbSession, audit: AuditDep
 ) -> MasulRead:
-    _check_access(user)
-    district = body.district_id
-    if user.role == UserRole.TASHKILOT_DIREKTORI:
-        district = user.district_id or district
-
-    masul = Masul(
-        full_name=body.full_name,
-        district_id=district,
-        organization_id=body.organization_id,
-        phone=body.phone,
-        email=body.email,
+    masul = await _service(session).create(current, payload)
+    await audit.record(
+        "masul.create", "masul", masul.id,
+        after=MasulRead.model_validate(masul).model_dump(mode="json"),
     )
-    repo = MasullarRepository(session)
-    await repo.add(masul)
-    await record_audit(session, user=user, action="masul.create", entity_type="masul", entity_id=masul.id)
-    await session.flush()
     await session.commit()
-    with contextlib.suppress(Exception):
-        await session.refresh(masul)
     return MasulRead.model_validate(masul)
 
 
 @router.get("/{masul_id}", response_model=MasulRead)
-async def get_masul(
-        masul_id: UUID, session: DbSession, user: CurrentUserDep,
-) -> MasulRead:
-    _check_access(user)
-    masul = await MasullarRepository(session).get_by_id(masul_id)
-    if masul is None:
-        raise NotFoundError(code="masul_not_found")
-    if user.role == UserRole.TASHKILOT_DIREKTORI and user.district_id != masul.district_id:
-        raise ForbiddenError(code="district_mismatch")
+async def get_masul(masul_id: UUID, current: Access, session: DbSession) -> MasulRead:
+    masul = await _service(session).get(current, masul_id)
     return MasulRead.model_validate(masul)
 
 
 @router.patch("/{masul_id}", response_model=MasulRead)
 async def update_masul(
-        masul_id: UUID, body: MasulUpdate, session: DbSession, user: CurrentUserDep,
+    masul_id: UUID,
+    payload: MasulUpdate,
+    current: Access,
+    session: DbSession,
+    audit: AuditDep,
 ) -> MasulRead:
-    _check_access(user)
-    repo = MasullarRepository(session)
-    masul = await repo.get_by_id(masul_id)
-    if masul is None:
-        raise NotFoundError(code="masul_not_found")
-    if user.role == UserRole.TASHKILOT_DIREKTORI and user.district_id != masul.district_id:
-        raise ForbiddenError(code="district_mismatch")
-
-    updates = body.model_dump(exclude_unset=True)
-    for k, v in updates.items():
-        setattr(masul, k, v)
-
-    await record_audit(session, user=user, action="masul.update", entity_type="masul", entity_id=masul.id,
-                       after=updates)
-    await session.flush()
+    masul = await _service(session).update(current, masul_id, payload)
+    await audit.record(
+        "masul.update", "masul", masul_id,
+        before=payload.model_dump(exclude_unset=True, mode="json"),
+        after=MasulRead.model_validate(masul).model_dump(mode="json"),
+    )
     await session.commit()
-    with contextlib.suppress(Exception):
-        await session.refresh(masul)
     return MasulRead.model_validate(masul)
 
 
 @router.delete("/{masul_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_masul(
-        masul_id: UUID, session: DbSession, user: CurrentUserDep,
+    masul_id: UUID, current: Access, session: DbSession, audit: AuditDep
 ) -> None:
-    _check_access(user)
-    repo = MasullarRepository(session)
-    masul = await repo.get_by_id(masul_id)
-    if masul is None:
-        raise NotFoundError(code="masul_not_found")
-    if user.role == UserRole.TASHKILOT_DIREKTORI and user.district_id != masul.district_id:
-        raise ForbiddenError(code="district_mismatch")
-
-    await record_audit(session, user=user, action="masul.delete", entity_type="masul", entity_id=masul.id)
-    await repo.delete(masul)
+    await _service(session).soft_delete(current, masul_id)
+    await audit.record("masul.delete", "masul", masul_id)
     await session.commit()

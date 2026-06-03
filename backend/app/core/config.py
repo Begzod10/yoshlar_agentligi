@@ -35,6 +35,8 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    backups_dir: str = "/home/rimefara/projects/yoshlar_agentligi/backups"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, v: object) -> object:

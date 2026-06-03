@@ -57,3 +57,4 @@ dist/
 
 # Local docker volumes (if mounted as bind mounts)
 .docker-data/
+backups/
