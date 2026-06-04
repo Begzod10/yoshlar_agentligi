@@ -42,3 +42,23 @@ class AuditService:
             user_agent=user_agent,
         )
         return await self._repo.add(entry)
+
+
+async def record_audit(
+    session: AsyncSession,
+    *,
+    user: CurrentUser,
+    action: str,
+    entity_type: str,
+    entity_id: UUID | None = None,
+    before: dict[str, Any] | None = None,
+    after: dict[str, Any] | None = None,
+) -> AuditLog:
+    return await AuditService(session).record(
+        user,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        before=before,
+        after=after,
+    )
