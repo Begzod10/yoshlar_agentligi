@@ -1,9 +1,11 @@
 "use client";
 
 import React from "react"
+import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/app-context";
+import { APP_PAGE_HREFS, type AppPageId } from "@/lib/navigation";
 import type { UserRole } from "@/lib/types";
 import {
   LayoutDashboard,
@@ -31,7 +33,7 @@ import {
 
 interface NavItem {
   title: string;
-  id: string;
+  id: AppPageId;
   icon: React.ElementType;
   roles: UserRole[];
   getBadge?: () => number | undefined;
@@ -39,10 +41,8 @@ interface NavItem {
 
 export function Sidebar({
   currentPage,
-  onPageChange,
 }: {
   currentPage: string;
-  onPageChange: (page: string) => void;
 }) {
   const { currentUser, sidebarOpen, setSidebarOpen, getVisibleYouth, getVisiblePlans, getVisibleMeetings } = useApp();
 
@@ -162,8 +162,8 @@ export function Sidebar({
                 return (
                   <Tooltip key={item.id}>
                     <TooltipTrigger asChild>
-                      <button
-                        onClick={() => onPageChange(item.id)}
+                      <Link
+                        href={APP_PAGE_HREFS[item.id]}
                         className={cn(
                           "w-full flex items-center justify-center h-10 rounded-md transition-colors relative",
                           isActive
@@ -175,7 +175,7 @@ export function Sidebar({
                         {badge && (
                           <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-sidebar-primary" />
                         )}
-                      </button>
+                      </Link>
                     </TooltipTrigger>
                     <TooltipContent side="right" className="flex items-center gap-2">
                       {item.title}
@@ -190,9 +190,9 @@ export function Sidebar({
               }
 
               return (
-                <button
+                <Link
                   key={item.id}
-                  onClick={() => onPageChange(item.id)}
+                  href={APP_PAGE_HREFS[item.id]}
                   className={cn(
                     "w-full flex items-center gap-3 h-10 px-3 rounded-md transition-colors text-sm",
                     isActive
@@ -207,7 +207,7 @@ export function Sidebar({
                       {badge}
                     </span>
                   )}
-                </button>
+                </Link>
               );
             })}
           </nav>
