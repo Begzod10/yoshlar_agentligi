@@ -3,6 +3,10 @@ import { z } from "zod";
 
 export const maxDuration = 30;
 
+function isAiConfigured() {
+  return Boolean(process.env.AI_GATEWAY_API_KEY);
+}
+
 const youthAnalysisSchema = z.object({
   riskLevel: z.enum(["past", "o'rta", "yuqori"]).describe("Xavf darajasi"),
   riskScore: z.number().min(0).max(100).describe("Xavf balli (0-100)"),
@@ -35,6 +39,13 @@ const planRecommendationSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  if (!isAiConfigured()) {
+    return Response.json(
+      { error: "AI_GATEWAY_API_KEY sozlanmagan" },
+      { status: 503 }
+    );
+  }
+
   const { type, data } = await req.json();
 
   if (type === "youth-analysis") {

@@ -230,17 +230,22 @@ export function AIChat({ context, className }: AIChatProps) {
                             </p>
                           );
                         }
-                        if (part.type === "tool-invocation") {
+                        if (part.type.startsWith("tool-")) {
+                          const toolPart = part as {
+                            type: string;
+                            state?: string;
+                            output?: unknown;
+                          };
                           return (
                             <div key={index} className="mt-2">
                               <Badge variant="outline" className="text-xs">
                                 <Sparkles className="h-3 w-3 mr-1" />
-                                {part.toolInvocation.toolName}
+                                {toolPart.type.replace(/^tool-/, "")}
                               </Badge>
-                              {part.toolInvocation.state === "output-available" && (
+                              {toolPart.state === "output-available" && (
                                 <pre className="mt-1 text-xs bg-background/50 p-2 rounded overflow-auto max-h-32">
                                   {JSON.stringify(
-                                    part.toolInvocation.output,
+                                    toolPart.output,
                                     null,
                                     2
                                   )}

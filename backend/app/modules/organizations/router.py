@@ -1,132 +1,107 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
+from app.core.audit_context import AuditDep
 from app.core.constants import UserRole
-from app.core.deps import CurrentUserDep, DbSession
-from app.core.exceptions import ForbiddenError, NotFoundError
-from app.modules.audit.service import record_audit
-from app.modules.organizations.models import Organization
+from app.core.deps import CurrentUser, DbSession
+from app.middleware.rbac import require_role
 from app.modules.organizations.repository import OrganizationsRepository
-from app.modules.organizations.schemas import OrganizationCreate, OrganizationRead, OrganizationUpdate
-from app.utils.pagination import PageParams
+from app.modules.organizations.schemas import (
+    OrganizationCreate,
+    OrganizationRead,
+    OrganizationUpdate,
+)
+from app.modules.organizations.service import OrganizationsService
+from app.utils.pagination import Page, PageParams
 
 router = APIRouter(prefix="/api/organizations", tags=["organizations"])
 
-ALLOWED_READERS = frozenset({UserRole.ADMIN, UserRole.DIREKTOR, UserRole.MODERATOR, UserRole.TASHKILOT_DIREKTORI})
-ALLOWED_WRITERS = frozenset({UserRole.ADMIN, UserRole.DIREKTOR})
+_READ_ROLES = (UserRole.ADMIN, UserRole.DIREKTOR, UserRole.MODERATOR)
+_WRITE_ROLES = (UserRole.ADMIN, UserRole.DIREKTOR)
+
+ReadAccess = Annotated[CurrentUser, Depends(require_role(*_READ_ROLES))]
+WriteAccess = Annotated[CurrentUser, Depends(require_role(*_WRITE_ROLES))]
 
 
-@router.get("")
+def _service(session: DbSession) -> OrganizationsService:
+    return OrganizationsService(OrganizationsRepository(session))
+
+
+@router.get("", response_model=Page[OrganizationRead])
 async def list_organizations(
-        session: DbSession,
-        user: CurrentUserDep,
-        district_id: str | None = None,
-        search: str | None = None,
-        page: int = Query(1, ge=1),
-        limit: int = Query(20, ge=1, le=100),
-) -> dict:
-    if user.role not in ALLOWED_READERS:
-        raise ForbiddenError("role_not_allowed")
-
-    # tashkilot_direktori faqat o'z tumani tashkilotlarini ko'radi
-    if user.role == UserRole.TASHKILOT_DIREKTORI:
-        district_id = user.district_id
-
-    repo = OrganizationsRepository(session)
+    _: ReadAccess,
+    session: DbSession,
+    district_id: str | None = Query(default=None),
+    search: str | None = Query(default=None, min_length=1, max_length=255),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=200),
+) -> Page[OrganizationRead]:
     params = PageParams(page=page, limit=limit)
-    orgs, total = await repo.list(
-        district_id=district_id,
-        search=search,
+    items, total = await OrganizationsRepository(session).list(
+        district_id=district_id, search=search, params=params
+    )
+    return Page.build(
+        items=[OrganizationRead.model_validate(o) for o in items],
+        total=total,
         params=params,
     )
-    return {
-        "data": [OrganizationRead.model_validate(o) for o in orgs],
-        "meta": {"total": total, "page": page, "limit": limit},
-    }
 
 
 @router.get("/{org_id}", response_model=OrganizationRead)
 async def get_organization(
-        org_id: UUID,
-        session: DbSession,
-        user: CurrentUserDep,
+    org_id: UUID, _: ReadAccess, session: DbSession
 ) -> OrganizationRead:
-    if user.role not in ALLOWED_READERS:
-        raise ForbiddenError("role_not_allowed")
-
-    repo = OrganizationsRepository(session)
-    org = await repo.get_by_id(org_id)
-    if org is None:
-        raise NotFoundError("organization_not_found")
-    if user.role == UserRole.TASHKILOT_DIREKTORI and org.district_id != user.district_id:
-        raise ForbiddenError("district_mismatch")
+    org = await _service(session).get(org_id)
     return OrganizationRead.model_validate(org)
 
 
 @router.post("", response_model=OrganizationRead, status_code=status.HTTP_201_CREATED)
 async def create_organization(
-        body: OrganizationCreate,
-        session: DbSession,
-        user: CurrentUserDep,
+    payload: OrganizationCreate,
+    current: WriteAccess,
+    session: DbSession,
+    audit: AuditDep,
 ) -> OrganizationRead:
-    if user.role not in ALLOWED_WRITERS:
-        raise ForbiddenError("role_not_allowed")
-
-    org = Organization(
-        name=body.name,
-        district_id=body.district_id,
-        type=body.type,
-        contact_phone=body.contact_phone,
-        address=body.address,
-        director_name=body.director_name,
+    org = await _service(session).create(payload)
+    await audit.record(
+        "organization.create",
+        "organization",
+        org.id,
+        after=OrganizationRead.model_validate(org).model_dump(mode="json"),
     )
-    repo = OrganizationsRepository(session)
-    await repo.add(org)
-    await record_audit(session, user=user, action="organization.create", entity_type="organization", entity_id=org.id)
     await session.commit()
     return OrganizationRead.model_validate(org)
 
 
 @router.patch("/{org_id}", response_model=OrganizationRead)
 async def update_organization(
-        org_id: UUID,
-        body: OrganizationUpdate,
-        session: DbSession,
-        user: CurrentUserDep,
+    org_id: UUID,
+    payload: OrganizationUpdate,
+    current: WriteAccess,
+    session: DbSession,
+    audit: AuditDep,
 ) -> OrganizationRead:
-    if user.role not in ALLOWED_WRITERS:
-        raise ForbiddenError("role_not_allowed")
-
-    repo = OrganizationsRepository(session)
-    org = await repo.get_by_id(org_id)
-    if org is None:
-        raise NotFoundError("organization_not_found")
-
-    updates = body.model_dump(exclude_unset=True)
-    for k, v in updates.items():
-        setattr(org, k, v)
-
-    await record_audit(session, user=user, action="organization.update", entity_type="organization", entity_id=org.id,
-                       after=updates)
+    org = await _service(session).update(org_id, payload)
+    await audit.record(
+        "organization.update",
+        "organization",
+        org_id,
+        before=payload.model_dump(exclude_unset=True, mode="json"),
+        after=OrganizationRead.model_validate(org).model_dump(mode="json"),
+    )
     await session.commit()
     return OrganizationRead.model_validate(org)
 
 
 @router.delete("/{org_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_organization(
-        org_id: UUID,
-        session: DbSession,
-        user: CurrentUserDep,
+    org_id: UUID,
+    current: WriteAccess,
+    session: DbSession,
+    audit: AuditDep,
 ) -> None:
-    if user.role not in ALLOWED_WRITERS:
-        raise ForbiddenError("role_not_allowed")
-
-    repo = OrganizationsRepository(session)
-    org = await repo.get_by_id(org_id)
-    if org is None:
-        raise NotFoundError("organization_not_found")
-
-    await record_audit(session, user=user, action="organization.delete", entity_type="organization", entity_id=org.id)
-    await repo.delete(org)
+    await _service(session).soft_delete(org_id)
+    await audit.record("organization.delete", "organization", org_id)
     await session.commit()
