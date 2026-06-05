@@ -27,6 +27,8 @@ import {
   BarChart3,
 } from "lucide-react";
 import type { Youth, Meeting, IndividualPlan } from "@/lib/types";
+import {api} from "@/lib/api/client";
+import {config} from "@/lib/config";
 
 interface AIYouthAnalysisProps {
   youth: Youth;
@@ -80,7 +82,7 @@ export function AIYouthAnalysis({
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/ai/analyze", {
+      const response = await fetch(`${config.apiUrl}/api/ai/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

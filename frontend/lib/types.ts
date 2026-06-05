@@ -117,11 +117,17 @@ export interface Meeting {
   date: string;
   time?: string;
   location: string;
-  type?: "individual" | "group" | "home_visit" | "online" | string | null;
+  type?: "individual" | "group" | "home_visit" | "online" | string | null | undefined;
   status: "scheduled" | "completed" | "cancelled";
+
   notes?: string;
   photos?: string[];
+
+  attendanceStatus?: "attended" | "no_show" | "rescheduled";
+  attachments?: string[];
+
   createdAt: string;
+  agenda?: string | null;
 }
 
 export interface CompletedWork {

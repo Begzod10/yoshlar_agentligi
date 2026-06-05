@@ -1,12 +1,8 @@
 "use client";
 
-import React from "react"
-
-import { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useApp } from "@/lib/app-context";
-import { downloadReport, usePlans } from "@/lib/api/hooks/use-core-api";
-import { usePageDataContext } from "@/lib/page-data-context";
-import { ResourcePagination } from "@/components/app/resource-pagination";
+import { usePlans } from "@/lib/api/hooks/use-core-api";
 import type { IndividualPlan } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,16 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -57,10 +43,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Search,
   Plus,
   MoreHorizontal,
   Eye,
-  Edit,
   Trash2,
   Download,
   FileText,
@@ -69,8 +55,23 @@ import {
   Calendar,
   PlayCircle,
   XCircle,
-  MapPin,
+  Sparkles,
+  Loader2,
+  X,
 } from "lucide-react";
+
+interface Milestone {
+  week: number;
+  target: string;
+}
+
+interface AIPlanRecommendation {
+  title: string;
+  description: string;
+  activities: { name: string; frequency: string; responsible: string; duration: string }[];
+  milestones: Milestone[];
+  expectedOutcomes: string[];
+}
 
 export function RejalarPage() {
   const {
@@ -81,8 +82,9 @@ export function RejalarPage() {
     addPlan,
     updatePlan,
     deletePlan,
+    getVisibleYouth,
     selectedDistrict,
-    showToast,
+    addToast,
   } = useApp();
 
   // Fire GET /api/plans on mount
@@ -94,60 +96,61 @@ export function RejalarPage() {
   const isTashkilotDirektor = currentUser?.role === "tashkilot_direktori";
   const canAdd = isAdmin || isDirektor || isTashkilotDirektor || isMasul;
   const canEdit = isAdmin || isDirektor || isTashkilotDirektor || isMasul;
+  const canDelete = isAdmin || isDirektor;
 
+  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isProgressDialogOpen, setIsProgressDialogOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<IndividualPlan | null>(null);
-  const [deleteCandidate, setDeleteCandidate] = useState<IndividualPlan | null>(null);
-  const pageData = usePageDataContext();
+  const [progressValue, setProgressValue] = useState(0);
+  const [progressComment, setProgressComment] = useState("");
 
-  useEffect(() => {
-    pageData?.setResourceParams("plans", {
-      status:
-        statusFilter === "all"
-          ? undefined
-          : statusFilter === "planned"
-            ? "draft"
-            : statusFilter,
-    });
-  }, [pageData, statusFilter]);
+  // AI state
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiRecommendation, setAiRecommendation] = useState<AIPlanRecommendation | null>(null);
+  const [selectedYouthForAI, setSelectedYouthForAI] = useState<string>("");
 
-  // Get youth for district
-  const filteredYouth = youth.filter((y) => {
-    if (isMasul) return y.assignedMasulId === currentUser?.id;
-    if (isTashkilotDirektor && currentUser?.districtId) {
-      return y.districtId === currentUser.districtId;
-    }
-    if (selectedDistrict !== "all") return y.districtId === selectedDistrict;
-    return true;
-  });
+  // Milestones for new plan form
+  const [milestones, setMilestones] = useState<Milestone[]>([{ week: 1, target: "" }]);
+
+  // Get visible youth filtered by role
+  const ownYouth = getVisibleYouth();
+
+  const filteredYouth = isMasul
+    ? ownYouth
+    : youth.filter((y) => {
+        if (isTashkilotDirektor && currentUser?.districtId) {
+          return y.districtId === currentUser.districtId;
+        }
+        if (selectedDistrict && selectedDistrict !== "all") return y.districtId === selectedDistrict;
+        return true;
+      });
 
   const youthIds = filteredYouth.map((y) => y.id);
 
-  const filteredPlans = plans;
-  const reportDistrict =
-    isTashkilotDirektor && currentUser?.districtId
-      ? currentUser.districtId
-      : selectedDistrict !== "all"
-        ? selectedDistrict
-        : undefined;
+  let filteredPlans = plans.filter((p) => {
+    if (isMasul) {
+      if (p.masulId !== currentUser?.id) return false;
+    } else if (isTashkilotDirektor && currentUser?.districtId) {
+      if (!youthIds.includes(p.youthId)) return false;
+    } else if (selectedDistrict && selectedDistrict !== "all") {
+      if (!youthIds.includes(p.youthId)) return false;
+    }
 
-  const handleExport = () => {
-    void downloadReport
-      .plans(reportDistrict)
-      .then(() => showToast("Export yuklab olindi", "success"))
-      .catch((error) =>
-        showToast(error instanceof Error ? error.message : "Export yuklanmadi", "error")
-      );
-  };
+    if (statusFilter !== "all" && p.status !== statusFilter) return false;
 
-  // Statistics
+    const matchesSearch =
+      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.youthName.toLowerCase().includes(searchQuery.toLowerCase());
+
+    return matchesSearch;
+  });
+
   const totalPlans = filteredPlans.length;
   const completedPlans = filteredPlans.filter((p) => p.status === "completed").length;
   const inProgressPlans = filteredPlans.filter((p) => p.status === "in_progress").length;
-  const pendingPlans = filteredPlans.filter((p) => p.status === "pending").length;
   const completionRate = totalPlans > 0 ? Math.round((completedPlans / totalPlans) * 100) : 0;
 
   const getStatusBadge = (status: IndividualPlan["status"]) => {
@@ -166,11 +169,11 @@ export function RejalarPage() {
             Jarayonda
           </Badge>
         );
-      case "pending":
+      case "planned":
         return (
-          <Badge className="bg-warning/10 text-warning border-warning/20">
+          <Badge className="bg-muted text-muted-foreground">
             <Clock className="mr-1 h-3 w-3" />
-            Kutilmoqda
+            Rejalashtirilgan
           </Badge>
         );
       case "cancelled":
@@ -183,47 +186,120 @@ export function RejalarPage() {
     }
   };
 
-  const handleAddPlan = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+  // ─── AI Recommendation ──────────────────────────────────────────────────────
+  const fetchAIRecommendation = async (youthId: string) => {
+    const youthObj = filteredYouth.find((y) => y.id === youthId);
+    if (!youthObj) return;
 
-    const youthId = formData.get("youthId") as string;
-    const selectedYouth = youth.find((y) => y.id === youthId);
+    setAiLoading(true);
+    setAiRecommendation(null);
+    try {
+      const res = await fetch("/api/ai/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "plan-recommendation",
+          youthId: youthObj.id,
+          userId: currentUser?.id,
+          data: {
+            youth: youthObj,
+            existingPlans: plans.filter((p) => p.youthId === youthObj.id),
+          },
+        }),
+      });
+      if (!res.ok) throw new Error("AI xizmati xatosi");
+      const json = await res.json();
+      setAiRecommendation(json.plan);
+    } catch (err) {
+      addToast({ title: "AI xatosi", description: "Tavsiya olishda xato yuz berdi", type: "error" });
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
-    const masulId = isMasul
-      ? currentUser?.id || ""
-      : (formData.get("masulId") as string);
-    const selectedMasul = masullar.find((m) => m.id === masulId);
+  const acceptAIRecommendation = () => {
+    if (!aiRecommendation) return;
+    setMilestones(aiRecommendation.milestones);
+    setIsAddDialogOpen(true);
+    // Pre-fill title / description via refs would require uncontrolled forms; we store in state instead
+    addToast({ title: "AI tavsiyasi qabul qilindi", description: "Formani tekshirib, saqlang", type: "info" });
+  };
 
-    const newPlan: Omit<IndividualPlan, "id" | "createdAt"> = {
-      title: formData.get("title") as string,
-      description: formData.get("description") as string,
-      youthId,
-      youthName: selectedYouth?.fullName || "",
-      masulId,
-      masulName: selectedMasul?.fullName || "",
-      startDate: formData.get("startDate") as string,
-      endDate: formData.get("endDate") as string,
-      status: "pending",
+  // ─── Add Plan ────────────────────────────────────────────────────────────────
+  const [formTitle, setFormTitle] = useState("");
+  const [formDescription, setFormDescription] = useState("");
+  const [formYouthId, setFormYouthId] = useState("");
+  const [formMasulId, setFormMasulId] = useState("");
+  const [formStartDate, setFormStartDate] = useState("");
+  const [formEndDate, setFormEndDate] = useState("");
+
+  const openAddDialog = () => {
+    if (aiRecommendation) {
+      setFormTitle(aiRecommendation.title);
+      setFormDescription(aiRecommendation.description);
+      setMilestones(aiRecommendation.milestones);
+    } else {
+      setFormTitle("");
+      setFormDescription("");
+      setMilestones([{ week: 1, target: "" }]);
+    }
+    setFormYouthId(selectedYouthForAI || "");
+    setFormMasulId("");
+    setFormStartDate("");
+    setFormEndDate("");
+    setIsAddDialogOpen(true);
+  };
+
+  const handleAddPlan = () => {
+    if (!formTitle || !formYouthId || !formStartDate || !formEndDate) {
+      addToast({ title: "Xatolik", description: "Majburiy maydonlarni to'ldiring", type: "error" });
+      return;
+    }
+
+    const selectedYouthObj = filteredYouth.find((y) => y.id === formYouthId);
+    const masulId = isMasul ? currentUser?.id || "" : formMasulId;
+    const selectedMasulObj = masullar.find((m) => m.id === masulId);
+
+    addPlan({
+      title: formTitle,
+      description: formDescription,
+      youthId: formYouthId,
+      youthName: selectedYouthObj?.fullName || "",
+
+      masulId: masulId, // 🔥 IMPORTANT
+      masulName: selectedMasulObj?.fullName || currentUser?.fullName || "",
+
+      startDate: formStartDate,
+      endDate: formEndDate,
+      status: "in_progress",
       progress: 0,
-      tasks: [],
-    };
-
-    addPlan(newPlan);
+    });
     setIsAddDialogOpen(false);
-    showToast("Reja muvaffaqiyatli qo'shildi", "success");
+    setAiRecommendation(null);
+    setSelectedYouthForAI("");
   };
 
-  const handleUpdateStatus = (plan: IndividualPlan, newStatus: IndividualPlan["status"]) => {
-    const progress = newStatus === "completed" ? 100 : newStatus === "in_progress" ? 50 : 0;
-    updatePlan(plan.id, { status: newStatus, progress });
-    showToast("Reja holati yangilandi", "success");
+  // ─── Update Progress ─────────────────────────────────────────────────────────
+  const openProgressDialog = (plan: IndividualPlan) => {
+    setSelectedPlan(plan);
+    setProgressValue(plan.progress);
+    setProgressComment("");
+    setIsProgressDialogOpen(true);
   };
 
-  const handleDeletePlan = () => {
-    if (!deleteCandidate) return;
-    deletePlan(deleteCandidate.id);
-    setDeleteCandidate(null);
+  const handleUpdateProgress = () => {
+    if (!selectedPlan) return;
+    updatePlan(selectedPlan.id, {
+      progress: progressValue,
+      status: progressValue === 100 ? "completed" : "in_progress",
+    });
+    setIsProgressDialogOpen(false);
+  };
+
+  const handleDeletePlan = (plan: IndividualPlan) => {
+    if (confirm(`"${plan.title}" rejasini o'chirishni tasdiqlaysizmi?`)) {
+      deletePlan(plan.id);
+    }
   };
 
   return (
@@ -237,20 +313,119 @@ export function RejalarPage() {
           </p>
         </div>
         {canAdd && (
-          <Button onClick={() => setIsAddDialogOpen(true)}>
+          <Button id="btn-add-plan" onClick={openAddDialog}>
             <Plus className="mr-2 h-4 w-4" />
             Reja qo'shish
           </Button>
         )}
       </div>
 
+      {/* AI Recommendation panel (masul_hodim) */}
+      {isMasul && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2 text-primary">
+              <Sparkles className="h-4 w-4" />
+              AI dan reja taklifini olish
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Select
+                value={selectedYouthForAI}
+                onValueChange={setSelectedYouthForAI}
+              >
+                <SelectTrigger className="flex-1" id="ai-youth-select">
+                  <SelectValue placeholder="Yosh tanlang..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {ownYouth.map((y) => (
+                    <SelectItem key={y.id} value={y.id}>
+                      {y.fullName} — {y.category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                id="btn-ai-recommend"
+                variant="default"
+                disabled={!selectedYouthForAI || aiLoading}
+                onClick={() => fetchAIRecommendation(selectedYouthForAI)}
+                className="gap-2 shrink-0"
+              >
+                {aiLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {aiLoading ? "Tahlil qilinmoqda..." : "AI tavsiyasi"}
+              </Button>
+            </div>
+
+            {/* AI result card */}
+            {aiRecommendation && (
+              <div className="mt-4 p-4 rounded-lg border border-primary/20 bg-background space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-sm">{aiRecommendation.title}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{aiRecommendation.description}</p>
+                  </div>
+                  <button
+                    onClick={() => setAiRecommendation(null)}
+                    className="text-muted-foreground hover:text-foreground shrink-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {aiRecommendation.milestones.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Bosqichlar:</p>
+                    <div className="space-y-1">
+                      {aiRecommendation.milestones.map((m) => (
+                        <div key={m.week} className="flex gap-2 text-xs">
+                          <span className="text-primary font-medium shrink-0">{m.week}-hafta:</span>
+                          <span className="text-muted-foreground">{m.target}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {aiRecommendation.expectedOutcomes.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Kutilayotgan natijalar:</p>
+                    <ul className="space-y-0.5">
+                      {aiRecommendation.expectedOutcomes.map((o, i) => (
+                        <li key={i} className="text-xs text-muted-foreground flex gap-1">
+                          <CheckCircle className="h-3 w-3 text-accent shrink-0 mt-0.5" />
+                          {o}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <Button
+                  id="btn-accept-ai-plan"
+                  size="sm"
+                  className="w-full gap-2"
+                  onClick={acceptAIRecommendation}
+                >
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  Qabul qilish va formani to'ldirish
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Statistics Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Jami rejalar
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Jami rejalar</CardTitle>
             <FileText className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
@@ -259,9 +434,7 @@ export function RejalarPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Bajarilgan
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Bajarilgan</CardTitle>
             <CheckCircle className="h-4 w-4 text-accent" />
           </CardHeader>
           <CardContent>
@@ -270,9 +443,7 @@ export function RejalarPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Jarayonda
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Jarayonda</CardTitle>
             <PlayCircle className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
@@ -281,9 +452,7 @@ export function RejalarPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Bajarish darajasi
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Bajarish darajasi</CardTitle>
             <Calendar className="h-4 w-4 text-chart-3" />
           </CardHeader>
           <CardContent>
@@ -299,22 +468,27 @@ export function RejalarPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Reja nomi yoki yosh nomi bo'yicha qidirish..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-full md:w-[180px]">
                 <SelectValue placeholder="Holat" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Barcha holatlar</SelectItem>
-                <SelectItem value="planned">Qoralama</SelectItem>
+                <SelectItem value="planned">Rejalashtirilgan</SelectItem>
                 <SelectItem value="in_progress">Jarayonda</SelectItem>
                 <SelectItem value="completed">Bajarilgan</SelectItem>
                 <SelectItem value="cancelled">Bekor qilingan</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={handleExport}>
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -327,7 +501,7 @@ export function RejalarPage() {
               <TableRow>
                 <TableHead>Reja nomi</TableHead>
                 <TableHead>Yosh</TableHead>
-                <TableHead>Mas'ul</TableHead>
+                {!isMasul && <TableHead>Mas'ul</TableHead>}
                 <TableHead>Muddat</TableHead>
                 <TableHead className="text-center">Progress</TableHead>
                 <TableHead className="text-center">Holat</TableHead>
@@ -337,7 +511,7 @@ export function RejalarPage() {
             <TableBody>
               {filteredPlans.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={isMasul ? 6 : 7} className="text-center py-8 text-muted-foreground">
                     Rejalar topilmadi
                   </TableCell>
                 </TableRow>
@@ -346,23 +520,23 @@ export function RejalarPage() {
                   <TableRow key={plan.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
                           <FileText className="h-5 w-5 text-primary" />
                         </div>
                         <div>
                           <p className="font-medium">{plan.title}</p>
-                          <p className="text-sm text-muted-foreground line-clamp-1">
-                            {plan.description}
-                          </p>
+                          <p className="text-sm text-muted-foreground line-clamp-1">{plan.description}</p>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <span className="font-medium">{plan.youthName}</span>
                     </TableCell>
-                    <TableCell>
-                      <span className="text-sm">{plan.masulName}</span>
-                    </TableCell>
+                    {!isMasul && (
+                      <TableCell>
+                        <span className="text-sm">{plan.masulName}</span>
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="text-sm">
                         <p>{plan.startDate}</p>
@@ -398,22 +572,24 @@ export function RejalarPage() {
                           {canEdit && plan.status !== "completed" && (
                             <>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => handleUpdateStatus(plan, "in_progress")}>
+                              <DropdownMenuItem onClick={() => openProgressDialog(plan)}>
                                 <PlayCircle className="mr-2 h-4 w-4" />
-                                Jarayonga o'tkazish
+                                Progressni yangilash
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleUpdateStatus(plan, "completed")}>
+                              <DropdownMenuItem
+                                onClick={() => updatePlan(plan.id, { status: "completed", progress: 100 })}
+                              >
                                 <CheckCircle className="mr-2 h-4 w-4" />
                                 Bajarildi
                               </DropdownMenuItem>
                             </>
                           )}
-                          {isAdmin && (
+                          {canDelete && (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive"
-                                onClick={() => setDeleteCandidate(plan)}
+                                onClick={() => handleDeletePlan(plan)}
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 O'chirish
@@ -428,81 +604,141 @@ export function RejalarPage() {
               )}
             </TableBody>
           </Table>
-          <ResourcePagination resource="plans" />
         </CardContent>
       </Card>
 
       {/* Add Plan Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Yangi reja qo'shish</DialogTitle>
-            <DialogDescription>
-              Individual ishlash rejasini yarating
-            </DialogDescription>
+            <DialogDescription>Individual ishlash rejasini yarating</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleAddPlan}>
-            <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="plan-title">Reja nomi *</Label>
+              <Input
+                id="plan-title"
+                value={formTitle}
+                onChange={(e) => setFormTitle(e.target.value)}
+                placeholder="Reja nomini kiriting"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="plan-description">Tavsif</Label>
+              <Textarea
+                id="plan-description"
+                value={formDescription}
+                onChange={(e) => setFormDescription(e.target.value)}
+                placeholder="Reja haqida qisqacha ma'lumot"
+                rows={3}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="plan-youth">Yosh *</Label>
+              <Select value={formYouthId} onValueChange={setFormYouthId}>
+                <SelectTrigger id="plan-youth">
+                  <SelectValue placeholder="Yoshni tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredYouth.map((y) => (
+                    <SelectItem key={y.id} value={y.id}>
+                      {y.fullName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {!isMasul && (
               <div className="grid gap-2">
-                <Label htmlFor="title">Reja nomi</Label>
-                <Input id="title" name="title" required placeholder="Reja nomini kiriting" />
+                <Label htmlFor="plan-masul">Mas'ul hodim *</Label>
+                <Select value={formMasulId} onValueChange={setFormMasulId}>
+                  <SelectTrigger id="plan-masul">
+                    <SelectValue placeholder="Mas'ulni tanlang" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {masullar.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.fullName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="plan-start">Boshlanish sanasi *</Label>
+                <Input
+                  id="plan-start"
+                  type="date"
+                  value={formStartDate}
+                  onChange={(e) => setFormStartDate(e.target.value)}
+                />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="description">Tavsif</Label>
-                <Textarea id="description" name="description" placeholder="Reja haqida qisqacha ma'lumot" />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="youthId">Yosh</Label>
-                  <Select name="youthId" required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Yoshni tanlang" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredYouth.filter((y) => y.id).map((y) => (
-                        <SelectItem key={y.id} value={y.id}>
-                          {y.fullName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {!isMasul && (
-                  <div className="grid gap-2">
-                    <Label htmlFor="masulId">Mas'ul hodim</Label>
-                    <Select name="masulId" required>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Mas'ulni tanlang" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {masullar.filter((m) => m.id).map((m) => (
-                          <SelectItem key={m.id} value={m.id}>
-                            {m.fullName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="startDate">Boshlanish sanasi</Label>
-                  <Input id="startDate" name="startDate" type="date" required />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="endDate">Tugash sanasi</Label>
-                  <Input id="endDate" name="endDate" type="date" required />
-                </div>
+                <Label htmlFor="plan-end">Tugash sanasi *</Label>
+                <Input
+                  id="plan-end"
+                  type="date"
+                  value={formEndDate}
+                  onChange={(e) => setFormEndDate(e.target.value)}
+                />
               </div>
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                Bekor qilish
-              </Button>
-              <Button type="submit">Qo'shish</Button>
-            </DialogFooter>
-          </form>
+
+            {/* Milestones */}
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Bosqichlar (milestones)</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setMilestones([...milestones, { week: milestones.length + 1, target: "" }])}
+                >
+                  + Bosqich qo'shish
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {milestones.map((ms, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <span className="text-xs text-muted-foreground w-16 shrink-0">{ms.week}-hafta:</span>
+                    <Input
+                      value={ms.target}
+                      onChange={(e) => {
+                        const updated = [...milestones];
+                        updated[idx] = { ...updated[idx], target: e.target.value };
+                        setMilestones(updated);
+                      }}
+                      placeholder={`${ms.week}-hafta maqsadi`}
+                      className="text-sm h-8"
+                    />
+                    {milestones.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => setMilestones(milestones.filter((_, i) => i !== idx))}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+              Bekor qilish
+            </Button>
+            <Button id="btn-save-plan" onClick={handleAddPlan}>
+              Saqlash
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -554,31 +790,62 @@ export function RejalarPage() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog
-        open={Boolean(deleteCandidate)}
-        onOpenChange={(open) => {
-          if (!open) setDeleteCandidate(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Rejani o'chirish</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteCandidate ? `"${deleteCandidate.title}" rejasini o'chirishni tasdiqlaysizmi?` : ""}
-              Bu amalni ortga qaytarib bo'lmaydi.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Bekor qilish</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={handleDeletePlan}
-            >
-              O'chirish
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Progress Update Dialog */}
+      <Dialog open={isProgressDialogOpen} onOpenChange={setIsProgressDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Progressni yangilash</DialogTitle>
+            <DialogDescription>{selectedPlan?.title}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Bajarilish darajasi</Label>
+                <span className="text-2xl font-bold text-primary">{progressValue}%</span>
+              </div>
+              <input
+                id="progress-slider"
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={progressValue}
+                onChange={(e) => setProgressValue(Number(e.target.value))}
+                className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>0%</span>
+                <span>50%</span>
+                <span>100%</span>
+              </div>
+            </div>
+            {progressValue === 100 && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-accent/10 text-accent text-sm">
+                <CheckCircle className="h-4 w-4 shrink-0" />
+                Reja bajarilgan deb belgilanadi
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="progress-comment">Izoh (ixtiyoriy)</Label>
+              <Textarea
+                id="progress-comment"
+                value={progressComment}
+                onChange={(e) => setProgressComment(e.target.value)}
+                placeholder="Bu yangilanish haqida qisqacha..."
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsProgressDialogOpen(false)}>
+              Bekor
+            </Button>
+            <Button id="btn-save-progress" onClick={handleUpdateProgress}>
+              Saqlash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

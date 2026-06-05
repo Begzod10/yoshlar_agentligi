@@ -192,7 +192,7 @@ export function masulToApp(masul: MasulRead, organizations: Organization[]): Mas
   return {
     id: masul.id,
     fullName: masul.fullName,
-    email: "",
+    email: masul.email || "",
     phone: masul.phone ?? "",
     districtId: asDistrict(masul.districtId),
     organizationId: masul.organizationId ?? "",
@@ -215,7 +215,7 @@ export function youthToApp(youth: YouthRead, masullar: Masul[], organizations: O
     address: youth.address ?? "",
     districtId: asDistrict(youth.districtId),
     phone: youth.contact ?? "",
-    category: "Boshqa",
+    category: "boshqa",
     notes: youth.notes ?? undefined,
     status: youth.status,
     assignedMasulId: youth.masulId ?? undefined,
