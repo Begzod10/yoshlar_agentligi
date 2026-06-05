@@ -1,10 +1,10 @@
 import { PageDataLoader } from "@/components/app/page-data-loader";
-import { MonitoringPage } from "@/components/pages/monitoring-page";
+import { RoleMonitoringPage } from "@/components/pages/role-routes/monitoring-page";
 
 export default function MonitoringRoute() {
   return (
     <PageDataLoader resources={["organizations", "masullar", "youth", "plans", "meetings"]}>
-      <MonitoringPage />
+      <RoleMonitoringPage />
     </PageDataLoader>
   );
 }
