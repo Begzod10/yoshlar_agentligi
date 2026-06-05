@@ -9,6 +9,7 @@ from app.modules.audit.service import record_audit
 from app.modules.organizations.models import Organization
 from app.modules.organizations.repository import OrganizationsRepository
 from app.modules.organizations.schemas import OrganizationCreate, OrganizationRead, OrganizationUpdate
+from app.utils.pagination import PageParams
 
 router = APIRouter(prefix="/api/organizations", tags=["organizations"])
 
@@ -33,12 +34,11 @@ async def list_organizations(
         district_id = user.district_id
 
     repo = OrganizationsRepository(session)
-    offset = (page - 1) * limit
+    params = PageParams(page=page, limit=limit)
     orgs, total = await repo.list(
         district_id=district_id,
         search=search,
-        offset=offset,
-        limit=limit,
+        params=params,
     )
     return {
         "data": [OrganizationRead.model_validate(o) for o in orgs],
