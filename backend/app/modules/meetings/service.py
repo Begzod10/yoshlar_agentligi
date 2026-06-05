@@ -39,7 +39,7 @@ class MeetingsService:
                 raise DistrictMismatchError()
             return
         if actor.role == UserRole.MASUL_HODIM:
-            if youth.masul_id != actor.id:
+            if youth.masul_id != actor.masul_id:
                 raise YouthNotAssignedError()
             return
         raise ForbiddenError("role_not_allowed")

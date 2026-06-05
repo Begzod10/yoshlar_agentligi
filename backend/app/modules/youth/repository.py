@@ -47,7 +47,7 @@ class YouthRepository:
             # masul_hodim sees only youth where they are the assigned masul,
             # joined via the user's own caseworker record. The link is
             # users.id <-> masullar.id (1-1 by seed) in v1.
-            base = base.where(Youth.masul_id == actor.id)
+            base = base.where(Youth.masul_id == actor.masul_id)
 
         if status is not None:
             base = base.where(Youth.status == status)

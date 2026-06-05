@@ -45,7 +45,7 @@ class MeetingsRepository:
         elif actor.role == UserRole.TASHKILOT_DIREKTORI:
             base = base.where(Youth.district_id == actor.district_id)
         elif actor.role == UserRole.MASUL_HODIM:
-            base = base.where(Youth.masul_id == actor.id)
+            base = base.where(Youth.masul_id == actor.masul_id)
 
         if youth_id is not None:
             base = base.where(Meeting.youth_id == youth_id)
