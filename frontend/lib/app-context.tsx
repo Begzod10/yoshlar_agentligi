@@ -180,7 +180,7 @@ export function organizationToApp(org: OrganizationRead): Organization {
     districtId: asDistrict(org.districtId),
     address: org.address ?? "",
     directorId: "",
-    directorName: org.headName ?? "",
+    directorName: org.directorName ?? "",
     masullarCount: 0,
     yoshlarCount: 0,
     createdAt: org.createdAt,
@@ -515,7 +515,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           name: org.name,
           districtId: org.districtId,
           address: org.address || null,
-          headName: org.directorName || null,
+          directorName: org.directorName || null,
         })
         .then(() => queryClient.invalidateQueries({ queryKey: ["organizations"] }))
         .catch(() =>
@@ -560,7 +560,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           name: data.name,
           districtId: data.districtId,
           address: data.address,
-          headName: data.directorName,
+          directorName: data.directorName,
         })
         .then(() => queryClient.invalidateQueries({ queryKey: ["organizations"] }))
         .catch(() =>

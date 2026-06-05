@@ -4,7 +4,7 @@ import React from "react"
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
-import { downloadReport } from "@/lib/api/hooks/use-core-api";
+import { downloadReport, useMeetings } from "@/lib/api/hooks/use-core-api";
 import { ResourcePagination } from "@/components/app/resource-pagination";
 import type { Meeting } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -82,6 +82,9 @@ export function UchrashuvlarPage() {
     selectedDistrict,
     showToast,
   } = useApp();
+
+  // Fire GET /api/meetings on mount
+  useMeetings({ page: 1, limit: 100 });
 
   const isAdmin = currentUser?.role === "admin";
   const isDirektor = currentUser?.role === "direktor";

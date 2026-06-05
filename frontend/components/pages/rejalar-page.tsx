@@ -4,7 +4,7 @@ import React from "react"
 
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
-import { downloadReport } from "@/lib/api/hooks/use-core-api";
+import { downloadReport, usePlans } from "@/lib/api/hooks/use-core-api";
 import { usePageDataContext } from "@/lib/page-data-context";
 import { ResourcePagination } from "@/components/app/resource-pagination";
 import type { IndividualPlan } from "@/lib/types";
@@ -84,6 +84,9 @@ export function RejalarPage() {
     selectedDistrict,
     showToast,
   } = useApp();
+
+  // Fire GET /api/plans on mount
+  usePlans({ page: 1, limit: 100 });
 
   const isAdmin = currentUser?.role === "admin";
   const isDirektor = currentUser?.role === "direktor";

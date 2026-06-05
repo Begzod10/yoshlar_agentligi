@@ -11,7 +11,7 @@ import {
   useForceYouthStatus,
   useRestoreYouth,
 } from "@/lib/api/hooks/use-admin";
-import { downloadReport, useMeetings, usePlans } from "@/lib/api/hooks/use-core-api";
+import { downloadReport, useMeetings, usePlans, useYouthList } from "@/lib/api/hooks/use-core-api";
 import type { Youth, ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
@@ -120,6 +120,9 @@ export function YoshlarPage() {
   const forceAssignMasul = useForceAssignMasul();
   const forceYouthStatus = useForceYouthStatus();
   const restoreYouth = useRestoreYouth();
+
+  // Fire GET /api/youth on mount
+  useYouthList({ page: 1, limit: 100 });
 
   const visibleYouth = getVisibleYouth();
   const visibleMasullar = getVisibleMasullar();

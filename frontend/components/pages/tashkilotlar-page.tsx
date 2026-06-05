@@ -4,7 +4,7 @@ import React from "react"
 
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
-import { downloadReport } from "@/lib/api/hooks/use-core-api";
+import { downloadReport, useOrganizations } from "@/lib/api/hooks/use-core-api";
 import { usePageDataContext } from "@/lib/page-data-context";
 import { ResourcePagination } from "@/components/app/resource-pagination";
 import type { Organization, ToshkentDistrict } from "@/lib/types";
@@ -80,6 +80,9 @@ export function TashkilotlarPage() {
     selectedDistrict,
     showToast,
   } = useApp();
+
+  // Fire GET /api/organizations on mount
+  useOrganizations({ page: 1, limit: 100 });
 
   const isAdmin = currentUser?.role === "admin";
   const isDirektor = currentUser?.role === "direktor";

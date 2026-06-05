@@ -4,7 +4,7 @@ import React from "react"
 
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
-import { downloadReport } from "@/lib/api/hooks/use-core-api";
+import { downloadReport, useMasullar } from "@/lib/api/hooks/use-core-api";
 import { usePageDataContext } from "@/lib/page-data-context";
 import { ResourcePagination } from "@/components/app/resource-pagination";
 import type { Masul, ToshkentDistrict } from "@/lib/types";
@@ -85,6 +85,9 @@ export function MasullarPage() {
     selectedDistrict,
     showToast,
   } = useApp();
+
+  // Fire GET /api/masullar on mount
+  useMasullar({ page: 1, limit: 100 });
 
   const isAdmin = currentUser?.role === "admin";
   const isDirektor = currentUser?.role === "direktor";
