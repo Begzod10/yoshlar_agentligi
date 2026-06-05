@@ -3,7 +3,16 @@ from fastapi import APIRouter, Query
 from app.core.constants import UserRole
 from app.core.deps import CurrentUserDep, DbSession
 from app.core.exceptions import ForbiddenError
-from app.modules.stats.schemas import AgencyStats, CompareResult, DistrictStatsRow, TrendPoint
+from app.modules.stats.schemas import (
+    AgencyStats,
+    AiInsight,
+    CategoryStat,
+    CompareResult,
+    DistrictStatsRow,
+    RecentActivityRow,
+    TopYoshRow,
+    TrendPoint,
+)
 from app.modules.stats.service import StatsService
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
@@ -61,3 +70,35 @@ async def trends(
 ) -> list[TrendPoint]:
     _check_agency_access(user)
     return await StatsService(session).trends(metric, granularity)
+
+
+@router.get("/categories", response_model=list[CategoryStat])
+async def stats_by_category(session: DbSession, user: CurrentUserDep) -> list[CategoryStat]:
+    _check_agency_access(user)
+    return await StatsService(session).by_category()
+
+
+@router.get("/top-yoshlar", response_model=list[TopYoshRow])
+async def top_yoshlar(
+    session: DbSession,
+    user: CurrentUserDep,
+    limit: int = Query(10, ge=1, le=100),
+) -> list[TopYoshRow]:
+    _check_agency_access(user)
+    return await StatsService(session).top_yoshlar(limit)
+
+
+@router.get("/recent-activity", response_model=list[RecentActivityRow])
+async def recent_activity(
+    session: DbSession,
+    user: CurrentUserDep,
+    limit: int = Query(20, ge=1, le=100),
+) -> list[RecentActivityRow]:
+    _check_agency_access(user)
+    return await StatsService(session).recent_activity(limit)
+
+
+@router.get("/ai-insights", response_model=list[AiInsight])
+async def ai_insights(session: DbSession, user: CurrentUserDep) -> list[AiInsight]:
+    _check_agency_access(user)
+    return await StatsService(session).ai_insights()
