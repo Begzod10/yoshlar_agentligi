@@ -64,6 +64,7 @@ class YouthService:
             masul_id=payload.masul_id,
             organization_id=payload.organization_id,
             status=YouthStatus.ACTIVE,
+            category=payload.category,
             contact=payload.contact,
             date_of_birth=payload.date_of_birth,
             address=payload.address,

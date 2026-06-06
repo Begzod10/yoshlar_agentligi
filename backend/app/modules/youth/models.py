@@ -31,6 +31,7 @@ class Youth(Base, TimestampMixin):
     status: Mapped[YouthStatus] = mapped_column(
         String(32), nullable=False, default=YouthStatus.ACTIVE, index=True
     )
+    category: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     contact: Mapped[str | None] = mapped_column(String(64), nullable=True)
     date_of_birth: Mapped[date | None] = mapped_column(Date(), nullable=True)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
