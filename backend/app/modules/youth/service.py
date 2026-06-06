@@ -125,7 +125,8 @@ class YouthService:
     async def _validate_masul_assignment(
         self, masul_id: UUID, youth_district: str
     ) -> None:
-        assert self._masullar is not None
+        if self._masullar is None:
+            raise RuntimeError("masullar repository required for masul assignment")
         masul = await self._masullar.get_by_id(masul_id)
         if masul is None:
             raise ValidationError("masul_not_found")

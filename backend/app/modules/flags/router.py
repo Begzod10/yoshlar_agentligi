@@ -57,6 +57,12 @@ async def create_flag(
     return FlagRead.model_validate(flag)
 
 
+@router.get("/{flag_id}", response_model=FlagRead)
+async def get_flag(flag_id: UUID, _: Access, session: DbSession) -> FlagRead:
+    flag = await _service(session).get(flag_id)
+    return FlagRead.model_validate(flag)
+
+
 @router.patch("/{flag_id}", response_model=FlagRead)
 async def update_flag(
     flag_id: UUID,

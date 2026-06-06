@@ -39,9 +39,12 @@ def create_app() -> FastAPI:
         swagger_ui_parameters=SWAGGER_UI_PARAMETERS,
     )
 
+    # In dev, reflect any origin back (regex ".*") so credentials work from any IP.
+    # In prod, restrict to the explicit allowlist from CORS_ORIGINS env var.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=[] if settings.is_dev else settings.cors_origins,
+        allow_origin_regex=".*" if settings.is_dev else None,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

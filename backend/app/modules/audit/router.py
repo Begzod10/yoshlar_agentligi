@@ -12,7 +12,7 @@ from app.utils.pagination import Page, PageParams
 
 router = APIRouter(prefix="/api", tags=["audit"])
 
-AdminOnly = Annotated[CurrentUser, Depends(require_role(UserRole.ADMIN))]
+AdminOnly = Annotated[CurrentUser, Depends(require_role(UserRole.ADMIN, UserRole.MODERATOR))]
 
 
 @router.get("/audit-log", response_model=Page[AuditLogRead])

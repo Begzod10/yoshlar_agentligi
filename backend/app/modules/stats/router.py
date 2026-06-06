@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Query
 
 from app.core.constants import UserRole
@@ -65,8 +67,8 @@ async def compare_districts(
 async def trends(
     session: DbSession,
     user: CurrentUserDep,
-    metric: str = Query(..., description="youth | plans | meetings"),
-    granularity: str = Query("month", description="month | week | day"),
+    metric: Literal["youth", "plans", "meetings"] = Query(...),
+    granularity: Literal["day", "week", "month", "year"] = Query("month"),
 ) -> list[TrendPoint]:
     _check_agency_access(user)
     return await StatsService(session).trends(metric, granularity)

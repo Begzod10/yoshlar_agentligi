@@ -52,5 +52,16 @@ class MasullarService:
         return masul
 
     async def soft_delete(self, actor: CurrentUser, masul_id: UUID) -> None:
+        from sqlalchemy import select, func
+        from app.modules.youth.models import Youth
         masul = await self.get(actor, masul_id)
+        linked = (await self._repo._session.execute(
+            select(func.count(Youth.id)).where(
+                Youth.masul_id == masul_id,
+                Youth.deleted_at.is_(None),
+            )
+        )).scalar_one()
+        if linked > 0:
+            from app.core.exceptions import ConflictError
+            raise ConflictError(f"masul_has_{linked}_active_youth")
         masul.deleted_at = datetime.now(tz=UTC)

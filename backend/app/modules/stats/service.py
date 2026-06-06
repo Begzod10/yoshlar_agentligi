@@ -1,4 +1,4 @@
-from sqlalchemy import case, cast, func, select, Float
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import MeetingAttendance, PlanStatus, YouthStatus
@@ -30,23 +30,27 @@ class StatsService:
             func.count().filter(Youth.status == YouthStatus.ACTIVE).label("active"),
             func.count().filter(Youth.status == YouthStatus.GRADUATED).label("graduated"),
             func.count().filter(Youth.status == YouthStatus.REMOVED).label("removed"),
-        )
+        ).where(Youth.deleted_at.is_(None))
         yr = (await self._session.execute(youth_q)).one()
 
-        org_count = (await self._session.execute(select(func.count(Organization.id)))).scalar_one()
-        masul_count = (await self._session.execute(select(func.count(Masul.id)))).scalar_one()
+        org_count = (await self._session.execute(
+            select(func.count(Organization.id)).where(Organization.deleted_at.is_(None))
+        )).scalar_one()
+        masul_count = (await self._session.execute(
+            select(func.count(Masul.id)).where(Masul.deleted_at.is_(None))
+        )).scalar_one()
 
         plan_q = select(
             func.count(Plan.id).label("total"),
             func.count().filter(Plan.status == PlanStatus.COMPLETED).label("completed"),
             func.count().filter(Plan.status == PlanStatus.IN_PROGRESS).label("in_progress"),
-        )
+        ).where(Plan.deleted_at.is_(None))
         pr = (await self._session.execute(plan_q)).one()
 
         meeting_q = select(
             func.count(Meeting.id).label("total"),
             func.count().filter(Meeting.attendance_status == MeetingAttendance.ATTENDED).label("attended"),
-        )
+        ).where(Meeting.deleted_at.is_(None))
         mr = (await self._session.execute(meeting_q)).one()
 
         return AgencyStats(
@@ -71,18 +75,27 @@ class StatsService:
                 func.count().filter(Youth.status == YouthStatus.ACTIVE).label("active"),
                 func.count().filter(Youth.status == YouthStatus.GRADUATED).label("graduated"),
             )
+            .where(Youth.deleted_at.is_(None))
             .group_by(Youth.district_id)
         )
         if district_ids:
             youth_q = youth_q.where(Youth.district_id.in_(district_ids))
         youth_rows = {r.district_id: r for r in (await self._session.execute(youth_q)).all()}
 
-        org_q = select(Organization.district_id, func.count(Organization.id).label("cnt")).group_by(Organization.district_id)
+        org_q = (
+            select(Organization.district_id, func.count(Organization.id).label("cnt"))
+            .where(Organization.deleted_at.is_(None))
+            .group_by(Organization.district_id)
+        )
         if district_ids:
             org_q = org_q.where(Organization.district_id.in_(district_ids))
         org_rows = {r.district_id: r.cnt for r in (await self._session.execute(org_q)).all()}
 
-        masul_q = select(Masul.district_id, func.count(Masul.id).label("cnt")).group_by(Masul.district_id)
+        masul_q = (
+            select(Masul.district_id, func.count(Masul.id).label("cnt"))
+            .where(Masul.deleted_at.is_(None))
+            .group_by(Masul.district_id)
+        )
         if district_ids:
             masul_q = masul_q.where(Masul.district_id.in_(district_ids))
         masul_rows = {r.district_id: r.cnt for r in (await self._session.execute(masul_q)).all()}
@@ -151,18 +164,23 @@ class StatsService:
         ]
 
     async def trends(self, metric: str, granularity: str = "month") -> list[TrendPoint]:
+        _VALID_GRANULARITY = {"day", "week", "month", "year"}
+        if granularity not in _VALID_GRANULARITY:
+            granularity = "month"
+
         if metric == "youth":
-            model, date_col = Youth, Youth.created_at
+            model, date_col, deleted_col = Youth, Youth.created_at, Youth.deleted_at
         elif metric == "plans":
-            model, date_col = Plan, Plan.created_at
+            model, date_col, deleted_col = Plan, Plan.created_at, Plan.deleted_at
         elif metric == "meetings":
-            model, date_col = Meeting, Meeting.created_at
+            model, date_col, deleted_col = Meeting, Meeting.scheduled_at, Meeting.deleted_at
         else:
             return []
 
         trunc = func.date_trunc(granularity, date_col)
         stmt = (
             select(trunc.label("period"), func.count(model.id).label("value"))
+            .where(deleted_col.is_(None))
             .group_by(trunc)
             .order_by(trunc)
         )
