@@ -158,6 +158,7 @@ export interface PlanRead {
 
 export interface PlanCreate {
   youthId: string;
+  masulId?: string | null;
   title: string;
   goal?: string | null;
   milestones?: Milestone[];
