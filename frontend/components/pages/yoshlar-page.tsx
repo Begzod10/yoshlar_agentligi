@@ -164,6 +164,7 @@ export function YoshlarPage() {
     setIsLoading(true);
 
     const formData = new FormData(e.currentTarget);
+    const notes = (formData.get("notes") as string | null)?.trim() || undefined;
     await new Promise((r) => setTimeout(r, 500));
 
     if (!newYouthDistrict) {
@@ -178,11 +179,11 @@ export function YoshlarPage() {
       districtId: newYouthDistrict,
       phone: formData.get("phone") as string,
       category: formData.get("category") as string,
-      // @ts-ignore
-      notes: {
-        text: formData.get("notes") as string,
-      },
+      notes,
       status: "active",
+      aiScore: 0,
+      plansCount: 0,
+      meetingsCount: 0,
     });
 
       setIsLoading(false);
@@ -579,50 +580,62 @@ export function YoshlarPage() {
                   />
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label>Tuman *</Label>
-                {isTashkilotDirektor && currentUser?.districtId ? (
-                  <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span>{currentUser.districtId}</span>
-                    <input type="hidden" name="districtId" value={currentUser.districtId} />
-                  </div>
-                ) : (
-                  <Select
-                    value={newYouthDistrict}
-                    onValueChange={(val) => setNewYouthDistrict(val as ToshkentDistrict)}
-                  >
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Tuman *</Label>
+                  {isTashkilotDirektor && currentUser?.districtId ? (
+                    <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span>{currentUser.districtId}</span>
+                      <input type="hidden" name="districtId" value={currentUser.districtId} />
+                    </div>
+                  ) : (
+                    <Select
+                      value={newYouthDistrict}
+                      onValueChange={(val) => setNewYouthDistrict(val as ToshkentDistrict)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Tumanni tanlang" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TOSHKENT_VILOYATI_DISTRICTS.map((district) => (
+                          <SelectItem key={district} value={district}>
+                            {district}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="category">Kategoriya *</Label>
+                  <Select name="category" required>
                     <SelectTrigger>
-                      <SelectValue placeholder="Tumanni tanlang" />
+                      <SelectValue placeholder="Kategoriyani tanlang" />
                     </SelectTrigger>
                     <SelectContent>
-                      {TOSHKENT_VILOYATI_DISTRICTS.map((district) => (
-                        <SelectItem key={district} value={district}>
-                          {district}
+                      {youthCategories.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {cat}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                )}
+                </div>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="address">Manzil *</Label>
                 <Input id="address" name="address" required placeholder="To'liq manzil" />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="category">Kategoriya *</Label>
-                <Select name="category" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Kategoriyani tanlang" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {youthCategories.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="notes">Izoh</Label>
+                <Textarea
+                  id="notes"
+                  name="notes"
+                  rows={4}
+                  placeholder="Qo'shimcha ma'lumot..."
+                  className="resize-none"
+                />
               </div>
             </div>
             <DialogFooter>

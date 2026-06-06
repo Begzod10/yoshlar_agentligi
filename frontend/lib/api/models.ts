@@ -21,7 +21,7 @@ export interface YouthRead {
   status: "active" | "graduated" | "removed";
   category: string | null;
   contact: string | null;
-  notes: Record<string, unknown> | null;
+  notes: string | null;
   removal_proposal: RemovalProposal | null;
   created_at: string;
   updated_at: string;
@@ -75,9 +75,8 @@ export interface OrganizationRead {
   type: string | null;
   contact_phone: string | null;
   address: string | null;
-  director_name: string;
+  head_name: string | null;
   created_at: string;
-  updated_at: string;
 }
 
 // ── Stats models ─────────────────────────────────────────────────────────────
@@ -124,7 +123,7 @@ export interface CreateYouthBody {
   organization_id?: string;
   category?: string;
   contact?: string;
-  notes?: Record<string, unknown>;
+  notes?: string | null;
 }
 
 export interface UpdateYouthBody {
@@ -132,7 +131,7 @@ export interface UpdateYouthBody {
   birth_date?: string;
   category?: string;
   contact?: string;
-  notes?: Record<string, unknown>;
+  notes?: string | null;
   organization_id?: string;
 }
 
@@ -216,7 +215,7 @@ export interface UpdateAttendanceBody {
 export interface CreateOrganizationBody {
   name: string;
   district_id: string;
-  director_name: string;
+  head_name?: string | null;
   type?: string;
   contact_phone?: string;
   address?: string;
@@ -227,7 +226,7 @@ export interface UpdateOrganizationBody {
   type?: string;
   contact_phone?: string;
   address?: string;
-  director_name?: string;
+  head_name?: string | null;
 }
 
 // ── List filter params ────────────────────────────────────────────────────────

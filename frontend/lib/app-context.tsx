@@ -180,7 +180,7 @@ export function organizationToApp(org: OrganizationRead): Organization {
     districtId: asDistrict(org.districtId),
     address: org.address ?? "",
     directorId: "",
-    directorName: org.directorName ?? "",
+    directorName: org.headName ?? "",
     masullarCount: 0,
     yoshlarCount: 0,
     createdAt: org.createdAt,
@@ -215,7 +215,7 @@ export function youthToApp(youth: YouthRead, masullar: Masul[], organizations: O
     address: youth.address ?? "",
     districtId: asDistrict(youth.districtId),
     phone: youth.contact ?? "",
-    category: "boshqa",
+    category: youth.category ?? "boshqa",
     notes: youth.notes ?? undefined,
     status: youth.status,
     assignedMasulId: youth.masulId ?? undefined,
@@ -515,7 +515,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           name: org.name,
           districtId: org.districtId,
           address: org.address || null,
-          directorName: org.directorName || null,
+          headName: org.directorName || null,
         })
         .then(() => queryClient.invalidateQueries({ queryKey: ["organizations"] }))
         .catch(() =>
@@ -560,7 +560,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           name: data.name,
           districtId: data.districtId,
           address: data.address,
-          directorName: data.directorName,
+          headName: data.directorName,
         })
         .then(() => queryClient.invalidateQueries({ queryKey: ["organizations"] }))
         .catch(() =>
@@ -623,6 +623,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           districtId: youthData.districtId,
           masulId: youthData.assignedMasulId ?? null,
           organizationId: youthData.organizationId ?? null,
+          category: youthData.category || null,
           contact: youthData.phone || null,
           dateOfBirth: youthData.birthDate || null,
           address: youthData.address || null,
@@ -822,6 +823,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           districtId: masulData.districtId,
           organizationId: masulData.organizationId || null,
           phone: masulData.phone || null,
+          email: masulData.email || null,
           position: null,
         })
         .then(() => queryClient.invalidateQueries({ queryKey: ["masullar"] }))
@@ -875,6 +877,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           fullName: data.fullName,
           organizationId: data.organizationId,
           phone: data.phone,
+          email: data.email,
         })
         .then(() => queryClient.invalidateQueries({ queryKey: ["masullar"] }))
         .catch(() =>

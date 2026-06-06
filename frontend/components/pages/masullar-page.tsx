@@ -4,7 +4,7 @@ import React from "react"
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
-import {useMasullar, useOrganizations} from "@/lib/api/hooks/use-core-api";
+import { useOrganizations } from "@/lib/api/hooks/use-core-api";
 import type { Masul, ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,7 +61,7 @@ import {
   Phone,
   Mail,
 } from "lucide-react";
-import {useDistricts} from "@/lib/api/hooks/use-districts";
+import { useDistricts } from "@/lib/api/hooks/use-districts";
 
 export function MasullarPage() {
   const {
@@ -74,12 +74,6 @@ export function MasullarPage() {
     selectedDistrict,
     showToast,
   } = useApp();
-
-  // Fire GET /api/masullar on mount
-  useOrganizations({ page: 1, limit: 100 });
-
-  useMasullar({ page: 1, limit: 100 });
-
 
   const isAdmin = currentUser?.role === "admin";
   const isDirektor = currentUser?.role === "direktor";
@@ -94,7 +88,18 @@ export function MasullarPage() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedMasul, setSelectedMasul] = useState<Masul | null>(null);
+  const [addMasulDistrict, setAddMasulDistrict] = useState(
+    isTashkilotDirektor && currentUser?.districtId ? currentUser.districtId : ""
+  );
+  const [addMasulOrganizationId, setAddMasulOrganizationId] = useState("");
 
+  // Fire GET /api/masullar on mount
+  useOrganizations({
+    page: 1,
+    limit: 100,
+    districtId: addMasulDistrict || undefined,
+  });
+  const { data: districts = [] } = useDistricts();
 
   // Filter masullar based on role and selection
   let filteredMasullar = masullar.filter((m) => {
@@ -104,7 +109,7 @@ export function MasullarPage() {
     }
 
     // Global district filter
-    if (selectedDistrict && m.districtId !== selectedDistrict) return false;
+    if (selectedDistrict !== "all" && m.districtId !== selectedDistrict) return false;
 
     // Local filters
     if (districtFilter !== "all" && m.districtId !== districtFilter) return false;
@@ -129,6 +134,15 @@ export function MasullarPage() {
     ? organizations.filter((o) => o.districtId === currentUser.districtId)
     : organizations;
 
+  const addMasulOrganizations = addMasulDistrict
+    ? organizations.filter((o) => o.districtId === addMasulDistrict)
+    : [];
+
+  const addMasulDistrictOptions =
+    districts.length > 0
+      ? districts
+      : TOSHKENT_VILOYATI_DISTRICTS.map((district) => ({ id: district, name: district }));
+
   // Statistics
   const totalMasullar = filteredMasullar.length;
   const totalAssignedYouth = filteredMasullar.reduce((sum, m) => sum + m.assignedYouthCount, 0);
@@ -147,16 +161,18 @@ export function MasullarPage() {
     const formData = new FormData(e.currentTarget);
     const districtId = isTashkilotDirektor && currentUser?.districtId
       ? currentUser.districtId
-      : (formData.get("districtId") as ToshkentDistrict);
+      : addMasulDistrict;
 
-    const orgId = formData.get("organizationId") as string;
+    const orgId = addMasulOrganizationId || (formData.get("organizationId") as string);
     const org = organizations.find((o) => o.id === orgId);
+
+    if (!districtId || !orgId) return;
 
     const newMasul: Omit<Masul, "id" | "createdAt"> = {
       fullName: formData.get("fullName") as string,
       email: formData.get("email") as string,
       phone: formData.get("phone") as string,
-      districtId,
+      districtId: districtId as ToshkentDistrict,
       organizationId: orgId,
       organizationName: org?.name || "",
       assignedYouthCount: 0,
@@ -166,8 +182,18 @@ export function MasullarPage() {
     };
 
     addMasul(newMasul);
-    setIsAddDialogOpen(false);
+    handleAddDialogOpenChange(false);
     showToast("Mas'ul hodim muvaffaqiyatli qo'shildi", "success");
+  };
+
+  const handleAddDialogOpenChange = (open: boolean) => {
+    setIsAddDialogOpen(open);
+    if (open) {
+      setAddMasulDistrict(
+        isTashkilotDirektor && currentUser?.districtId ? currentUser.districtId : ""
+      );
+      setAddMasulOrganizationId("");
+    }
   };
 
   const handleEditMasul = (e: React.FormEvent<HTMLFormElement>) => {
@@ -417,7 +443,7 @@ export function MasullarPage() {
       </Card>
 
       {/* Add Masul Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+      <Dialog open={isAddDialogOpen} onOpenChange={handleAddDialogOpenChange}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Yangi mas'ul hodim qo'shish</DialogTitle>
@@ -441,41 +467,61 @@ export function MasullarPage() {
                   <Input id="phone" name="phone" required placeholder="+998 XX XXX XX XX" />
                 </div>
               </div>
-              {!isTashkilotDirektor && (
+              <div className="grid grid-cols-2 gap-4">
+                {!isTashkilotDirektor && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="districtId">Tuman</Label>
+                    <Select
+                      name="districtId"
+                      value={addMasulDistrict}
+                      onValueChange={(value) => {
+                        setAddMasulDistrict(value);
+                        setAddMasulOrganizationId("");
+                      }}
+                      required
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Tumanni tanlang" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {addMasulDistrictOptions.map((district) => (
+                          <SelectItem key={district.id} value={district.id}>
+                            {district.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="grid gap-2">
-                  <Label htmlFor="districtId">Tuman</Label>
-                  <Select name="districtId" required>
+                  <Label htmlFor="organizationId">Tashkilot</Label>
+                  <Select
+                    name="organizationId"
+                    value={addMasulOrganizationId}
+                    onValueChange={setAddMasulOrganizationId}
+                    disabled={!addMasulDistrict}
+                    required
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="Tumanni tanlang" />
+                      <SelectValue
+                        placeholder={
+                          addMasulDistrict ? "Tashkilotni tanlang" : "Avval tumanni tanlang"
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {TOSHKENT_VILOYATI_DISTRICTS.map((district) => (
-                        <SelectItem key={district} value={district}>
-                          {district}
+                      {addMasulOrganizations.map((org) => (
+                        <SelectItem key={org.id} value={org.id}>
+                          {org.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-              <div className="grid gap-2">
-                <Label htmlFor="organizationId">Tashkilot</Label>
-                <Select name="organizationId" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tashkilotni tanlang" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableOrganizations.map((org) => (
-                      <SelectItem key={org.id} value={org.id}>
-                        {org.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => handleAddDialogOpenChange(false)}>
                 Bekor qilish
               </Button>
               <Button type="submit">Qo'shish</Button>

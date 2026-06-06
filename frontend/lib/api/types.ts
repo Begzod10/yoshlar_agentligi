@@ -71,7 +71,7 @@ export interface DistrictRead {
 }
 
 // Backend returns snake_case; client.ts auto-converts to camelCase.
-// director_name → directorName, contact_phone → contactPhone, etc.
+// head_name → headName, contact_phone → contactPhone, etc.
 export interface OrganizationRead {
   id: string;
   name: string;
@@ -79,18 +79,18 @@ export interface OrganizationRead {
   type: string | null;
   contactPhone: string | null;
   address: string | null;
-  directorName: string;
+  headName: string | null;
   createdAt: string;
-  updatedAt: string;
 }
 
-export type OrganizationCreate = Pick<OrganizationRead, "name" | "districtId" | "directorName"> &
+export type OrganizationCreate = Pick<OrganizationRead, "name" | "districtId"> &
+  Partial<Pick<OrganizationRead, "headName">> &
   Partial<Pick<OrganizationRead, "type" | "contactPhone" | "address">>;
 
 export type OrganizationUpdate = Partial<Omit<OrganizationCreate, "districtId">>;
 
 export interface MasulRead {
-    email: string;
+  email: string;
   id: string;
   fullName: string;
   districtId: string;
@@ -101,7 +101,7 @@ export interface MasulRead {
 }
 
 export type MasulCreate = Pick<MasulRead, "fullName" | "districtId"> &
-  Partial<Pick<MasulRead, "organizationId" | "phone" | "position">>;
+  Partial<Pick<MasulRead, "organizationId" | "phone" | "email" | "position">>;
 
 export type MasulUpdate = Partial<Omit<MasulCreate, "districtId">>;
 
@@ -114,6 +114,7 @@ export interface YouthRead {
   masulId: string | null;
   organizationId: string | null;
   status: YouthStatus;
+  category: string | null;
   contact: string | null;
   dateOfBirth: string | null;
   address: string | null;
@@ -123,7 +124,12 @@ export interface YouthRead {
 }
 
 export type YouthCreate = Pick<YouthRead, "fullName" | "districtId"> &
-  Partial<Pick<YouthRead, "masulId" | "organizationId" | "contact" | "dateOfBirth" | "address" | "notes">>;
+  Partial<
+    Pick<
+      YouthRead,
+      "masulId" | "organizationId" | "category" | "contact" | "dateOfBirth" | "address" | "notes"
+    >
+  >;
 
 export type YouthUpdate = Partial<Omit<YouthCreate, "districtId">>;
 
