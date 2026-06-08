@@ -16,11 +16,7 @@ from app.core.exceptions import (
 )
 from app.modules.meetings.models import Meeting
 from app.modules.meetings.repository import MeetingsRepository
-from app.modules.meetings.schemas import (
-    AttendanceUpdate,
-    MeetingCreate,
-    MeetingUpdate,
-)
+from app.modules.meetings.schemas import MeetingCreate, MeetingUpdate
 from app.modules.youth.models import Youth
 from app.modules.youth.repository import YouthRepository
 
@@ -58,7 +54,7 @@ class MeetingsService:
 
         meeting = Meeting(
             youth_id=youth.id,
-            masul_id=youth.masul_id,
+            masul_id=payload.masul_id if payload.masul_id is not None else youth.masul_id,
             scheduled_at=payload.scheduled_at,
             type=payload.type,
             location=payload.location,
@@ -86,12 +82,22 @@ class MeetingsService:
         return meeting
 
     async def update_attendance(
-        self, actor: CurrentUser, meeting_id: UUID, payload: AttendanceUpdate
+        self,
+        actor: CurrentUser,
+        meeting_id: UUID,
+        attendance_status: MeetingAttendance,
+        attendance_notes: str | None = None,
+        new_scheduled_at: datetime | None = None,
+        attachment: dict | None = None,
     ) -> Meeting:
         meeting = await self.get(actor, meeting_id)
-        meeting.attendance_status = payload.attendance_status
-        if payload.attendance_notes is not None:
-            meeting.attendance_notes = payload.attendance_notes
+        meeting.attendance_status = attendance_status
+        if attendance_notes is not None:
+            meeting.attendance_notes = attendance_notes
+        if new_scheduled_at is not None:
+            meeting.scheduled_at = new_scheduled_at
+        if attachment is not None:
+            meeting.attachments = list(meeting.attachments or []) + [attachment]
         return meeting
 
     async def soft_delete(self, actor: CurrentUser, meeting_id: UUID) -> None:

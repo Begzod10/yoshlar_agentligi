@@ -96,6 +96,7 @@ class YouthRead(CamelModel):
     full_name: str
     district_id: str
     masul_id: UUID | None
+    masul_name: str | None = None
     organization_id: UUID | None
     status: YouthStatus
     category: str | None

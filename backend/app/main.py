@@ -1,9 +1,11 @@
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError, app_error_handler
@@ -65,6 +67,11 @@ def create_app() -> FastAPI:
 
     # ── admin panel ──────────────────────────────────────────
     app.include_router(admin_router)
+
+    # ── static media files ───────────────────────────────────
+    media_dir = settings.media_dir
+    os.makedirs(media_dir, exist_ok=True)
+    app.mount("/media", StaticFiles(directory=media_dir), name="media")
 
     @app.get("/healthz", tags=["meta"])
     async def healthz() -> dict[str, str]:

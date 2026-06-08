@@ -17,11 +17,14 @@ class MeetingBase(CamelModel):
 
 
 class MeetingCreate(MeetingBase):
+    masul_id: UUID | None = None
+
     model_config = schema_example(
         {
             "youthId": "6d41303a-29eb-4589-b80f-a60f27367e71",
+            "masulId": "eb33f00f-cfd4-4800-a4a2-260f0a26eefb",
             "scheduledAt": "2026-06-15T10:00:00Z",
-            "type": "consultation",
+            "type": "individual",
             "location": "Bekobod tumani yoshlar markazi",
             "agenda": "Oylik baholash va keyingi qadamlarni belgilash",
         }
@@ -74,6 +77,7 @@ class MeetingRead(CamelModel):
     id: UUID
     youth_id: UUID
     masul_id: UUID | None
+    masul_name: str | None = None
     scheduled_at: datetime
     type: str | None
     location: str | None

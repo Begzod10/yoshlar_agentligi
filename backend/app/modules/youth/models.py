@@ -4,7 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import Date, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.constants import YouthStatus
 from app.db.base import Base, TimestampMixin, new_uuid
@@ -38,3 +38,11 @@ class Youth(Base, TimestampMixin):
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     removal_proposal: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    masul: Mapped["Masul | None"] = relationship(  # type: ignore[name-defined]
+        "Masul", foreign_keys=[masul_id], lazy="raise"
+    )
+
+    @property
+    def masul_name(self) -> str | None:
+        return self.masul.full_name if self.masul is not None else None

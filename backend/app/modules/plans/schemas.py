@@ -90,6 +90,7 @@ class PlanRead(CamelModel):
     id: UUID
     youth_id: UUID
     masul_id: UUID | None
+    masul_name: str | None = None
     title: str
     goal: str | None
     milestones: list[dict[str, Any]]
