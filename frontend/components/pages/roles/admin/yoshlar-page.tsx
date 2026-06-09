@@ -1,18 +1,17 @@
 "use client";
 
-import React from "react";
-
-import { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/lib/app-context";
-import { useYouthList } from "@/lib/api/hooks/use-core-api";
+import { adminApi } from "@/lib/api/client";
 import {
   useForceAssignMasul,
   useForceYouthStatus,
   useRestoreYouth,
 } from "@/lib/api/hooks/use-admin";
 import { youthCategories } from "@/lib/mock-data";
-import type { Youth, ToshkentDistrict } from "@/lib/types";
-import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
+import type { YouthRead, MasulRead } from "@/lib/api/types";
+import { TOSHKENT_VILOYATI_DISTRICTS, type ToshkentDistrict } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,7 +57,6 @@ import { AIYouthAnalysis } from "@/components/ai/ai-youth-analysis";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -75,37 +73,22 @@ import {
   Edit,
   UserPlus,
   Trash2,
-  Download,
   FileText,
   Calendar,
-  Award,
   Users,
-  X,
   Phone,
   MapPin,
-  Clock,
-  Activity,
   CheckCircle,
   UserMinus,
   AlertTriangle,
   Brain,
+  Loader2,
 } from "lucide-react";
+import { DataPagination } from "@/components/ui/data-pagination";
 
 export function AdminYoshlarPage() {
-  const {
-    currentUser,
-    selectedDistrict,
-    getVisibleYouth,
-    getVisibleMasullar,
-    getMasullarsForDistrict,
-    addYouth,
-    updateYouth,
-    assignYouthToMasul,
-    removeYouth,
-    validateDistrictAssignment,
-    canViewAllDistricts,
-    setCurrentPage,
-  } = useApp();
+  const { currentUser, addToast, setCurrentPage } = useApp();
+  const queryClient = useQueryClient();
 
   const isAdmin = currentUser?.role === "admin";
   const isDirektor = currentUser?.role === "direktor";
@@ -113,21 +96,54 @@ export function AdminYoshlarPage() {
   const isTashkilotDirektor = currentUser?.role === "tashkilot_direktori";
   const canEdit = isAdmin || isDirektor || isTashkilotDirektor;
   const canAssign = isAdmin || isTashkilotDirektor;
+
   const forceAssignMasul = useForceAssignMasul();
   const forceYouthStatus = useForceYouthStatus();
   const restoreYouth = useRestoreYouth();
 
-  // Fire GET /api/youth on mount
-  useYouthList({ page: 1, limit: 100 });
+  const LIMIT = 50;
 
-  const visibleYouth = getVisibleYouth();
-  const visibleMasullar = getVisibleMasullar();
-
+  // ── Filter + page state ───────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [districtFilter, setDistrictFilter] = useState<ToshkentDistrict | "all">("all");
+  const [districtFilter, setDistrictFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
 
+  const resetPage = () => setPage(1);
+
+  // ── Data ──────────────────────────────────────────────────────────────
+  const { data: youthData, isLoading: youthListLoading } = useQuery({
+    queryKey: ["admin-youth", page, districtFilter, statusFilter],
+    queryFn: () => {
+      const q: Record<string, string | number | boolean | null | undefined> = { page, limit: LIMIT };
+      if (districtFilter !== "all") q.district_id = districtFilter;
+      if (statusFilter !== "all") q.status = statusFilter;
+      return adminApi.get<{ data: YouthRead[]; total: number }>("/api/youth", { query: q });
+    },
+  });
+
+  const { data: masullarData } = useQuery({
+    queryKey: ["admin-masullar-youth"],
+    queryFn: () =>
+      adminApi.get<{ data: MasulRead[]; total: number }>("/api/masullar", {
+        query: { page: 1, limit: 200 },
+      }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const total = youthData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+
+  const masulMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const ms of masullarData?.data ?? []) m[ms.id] = ms.fullName;
+    return m;
+  }, [masullarData]);
+
+  const getMasulName = (y: YouthRead) => y.masulName ?? (y.masulId ? (masulMap[y.masulId] ?? null) : null);
+
+  // ── Dialog state ──────────────────────────────────────────────────────
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -135,158 +151,132 @@ export function AdminYoshlarPage() {
   const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
   const [isAIAnalysisOpen, setIsAIAnalysisOpen] = useState(false);
 
-  const [selectedYouth, setSelectedYouth] = useState<Youth | null>(null);
+  const [selectedYouth, setSelectedYouth] = useState<YouthRead | null>(null);
   const [selectedMasulId, setSelectedMasulId] = useState<string>("");
   const [removeReason, setRemoveReason] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
-  const [newYouthDistrict, setNewYouthDistrict] = useState<ToshkentDistrict | "">(
-    currentUser?.districtId || ""
+  const [newYouthDistrict, setNewYouthDistrict] = useState<string>(
+    currentUser?.districtId ?? ""
   );
 
-  // Apply filters
-  const filteredYouth = visibleYouth.filter((y) => {
-    const matchesSearch =
-      y.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      y.phone.includes(searchQuery);
-    const matchesStatus = statusFilter === "all" || y.status === statusFilter;
-    const matchesCategory = categoryFilter === "all" || y.category === categoryFilter;
-    const matchesDistrict = districtFilter === "all" || y.districtId === districtFilter;
-    return matchesSearch && matchesStatus && matchesCategory && matchesDistrict;
+  // Masullar filtered by selected youth's district (for assign dialog)
+  const assignableMasullar = useMemo(
+    () =>
+      (masullarData?.data ?? []).filter(
+        (m) => !selectedYouth || m.districtId === selectedYouth.districtId
+      ),
+    [masullarData, selectedYouth]
+  );
+
+  // ── Client-side filtering (category + search; district+status go to API) ──
+  const filteredYouth = (youthData?.data ?? []).filter((y) => {
+    if (isMasul && y.masulId !== currentUser?.id) return false;
+    if (categoryFilter !== "all" && y.category !== categoryFilter) return false;
+    const q = searchQuery.toLowerCase();
+    return (
+      y.fullName.toLowerCase().includes(q) ||
+      (y.contact ?? "").includes(searchQuery)
+    );
   });
 
-  // Get masullar for the selected youth's district (for assignment)
-  const getAvailableMasullar = (youth: Youth) => {
-    return getMasullarsForDistrict(youth.districtId);
-  };
-
+  // ── CRUD handlers ─────────────────────────────────────────────────────
   const handleAddYouth = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    const notes = (formData.get("notes") as string | null)?.trim() || undefined;
-    await new Promise((r) => setTimeout(r, 500));
-
-    if (!newYouthDistrict) {
-      setIsLoading(false);
-      return;
-    }
-
-    addYouth({
-      fullName: formData.get("fullName") as string,
-      birthDate: formData.get("birthDate") as string,
-      address: formData.get("address") as string,
-      districtId: newYouthDistrict,
-      phone: formData.get("phone") as string,
-      category: formData.get("category") as string,
-      notes,
-      status: "active",
-      aiScore: 0,
-      plansCount: 0,
-      meetingsCount: 0,
-    });
-
-      setIsLoading(false);
+    const fd = new FormData(e.currentTarget);
+    if (!newYouthDistrict) { setIsLoading(false); return; }
+    try {
+      await adminApi.post("/api/youth", {
+        fullName: fd.get("fullName") as string,
+        contact: (fd.get("phone") as string) || null,
+        dateOfBirth: (fd.get("birthDate") as string) || null,
+        address: (fd.get("address") as string) || null,
+        districtId: newYouthDistrict,
+        category: (fd.get("category") as string) || null,
+        notes: ((fd.get("notes") as string)?.trim()) || null,
+        status: "active",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["admin-youth"] });
       setIsAddDialogOpen(false);
-      setNewYouthDistrict(currentUser?.districtId || "");
-    };
+      setNewYouthDistrict(currentUser?.districtId ?? "");
+      addToast({ title: "Yosh qo'shildi", type: "success" });
+    } catch {
+      addToast({ title: "Xatolik", description: "Yosh qo'shishda xato yuz berdi", type: "error" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleEditYouth = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedYouth) return;
     setIsLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    await new Promise((r) => setTimeout(r, 500));
-
-    updateYouth(selectedYouth.id, {
-      fullName: formData.get("fullName") as string,
-      birthDate: formData.get("birthDate") as string,
-      address: formData.get("address") as string,
-      phone: formData.get("phone") as string,
-      category: formData.get("category") as string,
-    });
-
-    setIsLoading(false);
-    setIsEditDialogOpen(false);
-    setSelectedYouth(null);
+    const fd = new FormData(e.currentTarget);
+    try {
+      await adminApi.patch(`/api/youth/${selectedYouth.id}`, {
+        fullName: fd.get("fullName") as string,
+        contact: (fd.get("phone") as string) || null,
+        dateOfBirth: (fd.get("birthDate") as string) || null,
+        address: (fd.get("address") as string) || null,
+        category: (fd.get("category") as string) || null,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["admin-youth"] });
+      setIsEditDialogOpen(false);
+      setSelectedYouth(null);
+      addToast({ title: "Ma'lumotlar yangilandi", type: "success" });
+    } catch {
+      addToast({ title: "Xatolik", description: "Tahrirlashda xato yuz berdi", type: "error" });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleAssignYouth = async () => {
     if (!selectedYouth || !selectedMasulId) return;
     setIsLoading(true);
-
-    await new Promise((r) => setTimeout(r, 500));
-
-    if (isAdmin) {
-      try {
-        const result = await forceAssignMasul.mutateAsync({
-          youthId: selectedYouth.id,
-          masulId: selectedMasulId,
-          overrideDistrict: true,
-        });
-        updateYouth(selectedYouth.id, {
-          assignedMasulId: result.masulId ?? selectedMasulId,
-          status: result.status,
-        });
-        setIsAssignDialogOpen(false);
-        setSelectedYouth(null);
-        setSelectedMasulId("");
-      } finally {
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    // Validate district assignment
-    const isValid = validateDistrictAssignment(selectedYouth.districtId, selectedMasulId);
-    if (!isValid) {
+    try {
+      await forceAssignMasul.mutateAsync({
+        youthId: selectedYouth.id,
+        masulId: selectedMasulId,
+        overrideDistrict: true,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["admin-youth"] });
+      setIsAssignDialogOpen(false);
+      setSelectedYouth(null);
+      setSelectedMasulId("");
+      addToast({ title: "Biriktirildi", type: "success" });
+    } catch {
+      addToast({ title: "Xatolik", description: "Biriktirishda xato yuz berdi", type: "error" });
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    assignYouthToMasul(selectedYouth.id, selectedMasulId);
-
-    setIsLoading(false);
-    setIsAssignDialogOpen(false);
-    setSelectedYouth(null);
-    setSelectedMasulId("");
   };
 
   const handleRemoveYouth = async () => {
     if (!selectedYouth || !removeReason) return;
     setIsLoading(true);
-
-    await new Promise((r) => setTimeout(r, 500));
-    if (isAdmin) {
-      try {
-        const result = await forceYouthStatus.mutateAsync({
-          youthId: selectedYouth.id,
-          status: "removed",
-        });
-        updateYouth(selectedYouth.id, { status: result.status });
-      } finally {
-        setIsLoading(false);
-        setIsRemoveDialogOpen(false);
-        setSelectedYouth(null);
-        setRemoveReason("");
-      }
-      return;
+    try {
+      await forceYouthStatus.mutateAsync({ youthId: selectedYouth.id, status: "removed" });
+      await queryClient.invalidateQueries({ queryKey: ["admin-youth"] });
+      setIsRemoveDialogOpen(false);
+      setSelectedYouth(null);
+      setRemoveReason("");
+      addToast({ title: "Chiqarildi", type: "success" });
+    } catch {
+      addToast({ title: "Xatolik", description: "Chiqarishda xato yuz berdi", type: "error" });
+    } finally {
+      setIsLoading(false);
     }
-
-    removeYouth(selectedYouth.id, removeReason);
-
-    setIsLoading(false);
-    setIsRemoveDialogOpen(false);
-    setSelectedYouth(null);
-    setRemoveReason("");
   };
 
-  const handleRestoreYouth = async (youth: Youth) => {
+  const handleRestoreYouth = async (youth: YouthRead) => {
     setIsLoading(true);
     try {
-      const result = await restoreYouth.mutateAsync(youth.id);
-      updateYouth(youth.id, { status: result.status });
+      await restoreYouth.mutateAsync(youth.id);
+      await queryClient.invalidateQueries({ queryKey: ["admin-youth"] });
+      addToast({ title: "Tiklandi", type: "success" });
+    } catch {
+      addToast({ title: "Xatolik", description: "Tiklashda xato yuz berdi", type: "error" });
     } finally {
       setIsLoading(false);
     }
@@ -296,8 +286,6 @@ export function AdminYoshlarPage() {
     switch (status) {
       case "active":
         return <Badge className="bg-accent text-accent-foreground">Faol</Badge>;
-      case "inactive":
-        return <Badge variant="secondary">Nofaol</Badge>;
       case "graduated":
         return <Badge className="bg-chart-1 text-primary-foreground">Yakunlangan</Badge>;
       case "removed":
@@ -307,16 +295,10 @@ export function AdminYoshlarPage() {
     }
   };
 
-  const getAiScoreColor = (score: number) => {
-    if (score >= 80) return "text-accent";
-    if (score >= 60) return "text-chart-3";
-    if (score >= 40) return "text-orange-500";
-    return "text-destructive";
-  };
-
+  // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      {/* Page Header */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Yoshlar ro'yxati</h1>
@@ -326,7 +308,6 @@ export function AdminYoshlarPage() {
               : `Jami ${filteredYouth.length} ta yosh`}
           </p>
         </div>
-        {/* masul_hodim cannot add youth */}
         {canEdit && !isMasul && (
           <Button onClick={() => setIsAddDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -348,34 +329,29 @@ export function AdminYoshlarPage() {
                 className="pl-9"
               />
             </div>
-            {canViewAllDistricts() && (
-              <Select
-                value={districtFilter}
-                onValueChange={(val) => setDistrictFilter(val as ToshkentDistrict | "all")}
-              >
+            {(isAdmin || isDirektor) && (
+              <Select value={districtFilter} onValueChange={(v) => { setDistrictFilter(v); resetPage(); }}>
                 <SelectTrigger className="w-full md:w-[200px]">
                   <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
                   <SelectValue placeholder="Tuman" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Barcha tumanlar</SelectItem>
-                  {TOSHKENT_VILOYATI_DISTRICTS.map((district) => (
-                    <SelectItem key={district} value={district}>
-                      {district}
-                    </SelectItem>
+                  {TOSHKENT_VILOYATI_DISTRICTS.map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             )}
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); resetPage(); }}>
               <SelectTrigger className="w-full md:w-[150px]">
                 <SelectValue placeholder="Holat" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Barcha holatlar</SelectItem>
                 <SelectItem value="active">Faol</SelectItem>
-                <SelectItem value="inactive">Nofaol</SelectItem>
                 <SelectItem value="graduated">Yakunlangan</SelectItem>
+                <SelectItem value="removed">Chiqarilgan</SelectItem>
               </SelectContent>
             </Select>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -385,16 +361,10 @@ export function AdminYoshlarPage() {
               <SelectContent>
                 <SelectItem value="all">Barcha kategoriyalar</SelectItem>
                 {youthCategories.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
-                  </SelectItem>
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {!isMasul && <Button variant="outline" className="bg-transparent">
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>}
           </div>
         </CardContent>
       </Card>
@@ -409,15 +379,20 @@ export function AdminYoshlarPage() {
                 <TableHead>Tuman</TableHead>
                 <TableHead>Kategoriya</TableHead>
                 {!isMasul && <TableHead>Mas'ul</TableHead>}
-                <TableHead>AI ball</TableHead>
                 <TableHead>Holat</TableHead>
                 <TableHead className="text-right">Amallar</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredYouth.length === 0 ? (
+              {youthListLoading ? (
                 <TableRow>
-                  <TableCell colSpan={isMasul ? 6 : 7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={isMasul ? 5 : 6} className="text-center py-8 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+                  </TableCell>
+                </TableRow>
+              ) : filteredYouth.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={isMasul ? 5 : 6} className="text-center py-8 text-muted-foreground">
                     <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     Yoshlar topilmadi
                   </TableCell>
@@ -429,42 +404,32 @@ export function AdminYoshlarPage() {
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
                           <span className="text-sm font-medium text-primary">
-                            {youth.fullName
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")
-                              .slice(0, 2)}
+                            {youth.fullName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                           </span>
                         </div>
                         <div>
                           <p className="font-medium">{youth.fullName}</p>
-                          <p className="text-sm text-muted-foreground">{youth.phone}</p>
+                          <p className="text-sm text-muted-foreground">{youth.contact ?? "—"}</p>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <DistrictBadge districtId={youth.districtId} size="sm" />
+                      <DistrictBadge districtId={youth.districtId as ToshkentDistrict} size="sm" />
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{youth.category}</Badge>
+                      <Badge variant="outline">{youth.category ?? "—"}</Badge>
                     </TableCell>
-                    {!isMasul &&  <TableCell>
-                      {youth.assignedMasulName ? (
-                          <span className="text-sm">{youth.assignedMasulName}</span>
-                      ) : (
+                    {!isMasul && (
+                      <TableCell>
+                        {getMasulName(youth) ? (
+                          <span className="text-sm">{getMasulName(youth)}</span>
+                        ) : (
                           <Badge variant="secondary" className="text-orange-600 bg-orange-50">
                             Biriktirilmagan
                           </Badge>
-                      )}
-                    </TableCell>}
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className={`font-bold ${getAiScoreColor(youth.aiScore)}`}>
-                          {youth.aiScore}%
-                        </span>
-                        <Progress value={youth.aiScore} className="w-16 h-2" />
-                      </div>
-                    </TableCell>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell>{getStatusBadge(youth.status)}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -476,46 +441,23 @@ export function AdminYoshlarPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Amallar</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSelectedYouth(youth);
-                              setIsViewDialogOpen(true);
-                            }}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Ko'rish
+                          <DropdownMenuItem onClick={() => { setSelectedYouth(youth); setIsViewDialogOpen(true); }}>
+                            <Eye className="h-4 w-4 mr-2" />Ko'rish
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => {
-                              setSelectedYouth(youth);
-                              setIsAIAnalysisOpen(true);
-                            }}
+                            onClick={() => { setSelectedYouth(youth); setIsAIAnalysisOpen(true); }}
                             className="text-primary"
                           >
-                            <Brain className="h-4 w-4 mr-2" />
-                            AI Tahlil
+                            <Brain className="h-4 w-4 mr-2" />AI Tahlil
                           </DropdownMenuItem>
-                          {/* Edit / Assign / Remove — hidden for masul_hodim */}
                           {canEdit && !isMasul && (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedYouth(youth);
-                                setIsEditDialogOpen(true);
-                              }}
-                            >
-                              <Edit className="h-4 w-4 mr-2" />
-                              Tahrirlash
+                            <DropdownMenuItem onClick={() => { setSelectedYouth(youth); setIsEditDialogOpen(true); }}>
+                              <Edit className="h-4 w-4 mr-2" />Tahrirlash
                             </DropdownMenuItem>
                           )}
-                          {canAssign && !isMasul && !youth.assignedMasulId && (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedYouth(youth);
-                                setIsAssignDialogOpen(true);
-                              }}
-                            >
-                              <UserPlus className="h-4 w-4 mr-2" />
-                              Biriktirish
+                          {canAssign && !isMasul && !youth.masulId && (
+                            <DropdownMenuItem onClick={() => { setSelectedYouth(youth); setIsAssignDialogOpen(true); }}>
+                              <UserPlus className="h-4 w-4 mr-2" />Biriktirish
                             </DropdownMenuItem>
                           )}
                           {canEdit && !isMasul && youth.status === "active" && (
@@ -523,20 +465,15 @@ export function AdminYoshlarPage() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive"
-                                onClick={() => {
-                                  setSelectedYouth(youth);
-                                  setIsRemoveDialogOpen(true);
-                                }}
+                                onClick={() => { setSelectedYouth(youth); setIsRemoveDialogOpen(true); }}
                               >
-                                <UserMinus className="h-4 w-4 mr-2" />
-                                Chiqarish
+                                <UserMinus className="h-4 w-4 mr-2" />Chiqarish
                               </DropdownMenuItem>
                             </>
                           )}
                           {isAdmin && youth.status !== "active" && (
                             <DropdownMenuItem onClick={() => void handleRestoreYouth(youth)}>
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                              Admin restore
+                              <CheckCircle className="h-4 w-4 mr-2" />Admin restore
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
@@ -549,6 +486,17 @@ export function AdminYoshlarPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      <DataPagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        limit={LIMIT}
+        isLoading={youthListLoading}
+        onPageChange={setPage}
+        itemLabel="ta yosh"
+      />
 
       {/* Add Youth Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -567,17 +515,12 @@ export function AdminYoshlarPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="birthDate">Tug'ilgan sana *</Label>
-                  <Input id="birthDate" name="birthDate" type="date" required />
+                  <Label htmlFor="birthDate">Tug'ilgan sana</Label>
+                  <Input id="birthDate" name="birthDate" type="date" />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="phone">Telefon *</Label>
-                  <Input
-                    id="phone"
-                    name="phone"
-                    required
-                    placeholder="+998901234567"
-                  />
+                  <Label htmlFor="phone">Telefon</Label>
+                  <Input id="phone" name="phone" placeholder="+998901234567" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -587,64 +530,45 @@ export function AdminYoshlarPage() {
                     <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
                       <MapPin className="h-4 w-4 text-muted-foreground" />
                       <span>{currentUser.districtId}</span>
-                      <input type="hidden" name="districtId" value={currentUser.districtId} />
                     </div>
                   ) : (
-                    <Select
-                      value={newYouthDistrict}
-                      onValueChange={(val) => setNewYouthDistrict(val as ToshkentDistrict)}
-                    >
+                    <Select value={newYouthDistrict} onValueChange={setNewYouthDistrict}>
                       <SelectTrigger>
                         <SelectValue placeholder="Tumanni tanlang" />
                       </SelectTrigger>
                       <SelectContent>
-                        {TOSHKENT_VILOYATI_DISTRICTS.map((district) => (
-                          <SelectItem key={district} value={district}>
-                            {district}
-                          </SelectItem>
+                        {TOSHKENT_VILOYATI_DISTRICTS.map((d) => (
+                          <SelectItem key={d} value={d}>{d}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   )}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="category">Kategoriya *</Label>
-                  <Select name="category" required>
+                  <Label htmlFor="category">Kategoriya</Label>
+                  <Select name="category">
                     <SelectTrigger>
                       <SelectValue placeholder="Kategoriyani tanlang" />
                     </SelectTrigger>
                     <SelectContent>
                       {youthCategories.map((cat) => (
-                        <SelectItem key={cat} value={cat}>
-                          {cat}
-                        </SelectItem>
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="address">Manzil *</Label>
-                <Input id="address" name="address" required placeholder="To'liq manzil" />
+                <Label htmlFor="address">Manzil</Label>
+                <Input id="address" name="address" placeholder="To'liq manzil" />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="notes">Izoh</Label>
-                <Textarea
-                  id="notes"
-                  name="notes"
-                  rows={4}
-                  placeholder="Qo'shimcha ma'lumot..."
-                  className="resize-none"
-                />
+                <Textarea id="notes" name="notes" rows={3} placeholder="Qo'shimcha ma'lumot..." className="resize-none" />
               </div>
             </div>
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsAddDialogOpen(false)}
-                className="bg-transparent"
-              >
+              <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} className="bg-transparent">
                 Bekor qilish
               </Button>
               <Button type="submit" disabled={isLoading || !newYouthDistrict}>
@@ -667,119 +591,57 @@ export function AdminYoshlarPage() {
           </DialogHeader>
           {selectedYouth && (
             <Tabs defaultValue="info" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="info">Ma'lumotlar</TabsTrigger>
-                <TabsTrigger value="plans">Rejalar ({selectedYouth.plansCount})</TabsTrigger>
-                <TabsTrigger value="meetings">
-                  Uchrashuvlar ({selectedYouth.meetingsCount})
-                </TabsTrigger>
+                <TabsTrigger value="navigation">Sahifalar</TabsTrigger>
               </TabsList>
               <TabsContent value="info" className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span>{selectedYouth.phone}</span>
+                      <span>{selectedYouth.contact ?? "—"}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <span>{selectedYouth.address}</span>
+                      <span>{selectedYouth.address ?? "—"}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span>Tug'ilgan: {selectedYouth.birthDate}</span>
+                      <span>Tug'ilgan: {selectedYouth.dateOfBirth ?? "—"}</span>
                     </div>
                     <div>
                       <span className="text-sm text-muted-foreground">Tuman:</span>
                       <div className="mt-1">
-                        <DistrictBadge districtId={selectedYouth.districtId} />
+                        <DistrictBadge districtId={selectedYouth.districtId as ToshkentDistrict} />
                       </div>
                     </div>
                   </div>
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <div>
                       <span className="text-sm text-muted-foreground">Kategoriya</span>
-                      <p className="font-medium">{selectedYouth.category}</p>
+                      <p className="font-medium">{selectedYouth.category ?? "—"}</p>
                     </div>
                     <div>
                       <span className="text-sm text-muted-foreground">Mas'ul hodim</span>
-                      <p className="font-medium">
-                        {selectedYouth.assignedMasulName || "Biriktirilmagan"}
-                      </p>
+                      <p className="font-medium">{getMasulName(selectedYouth) ?? "Biriktirilmagan"}</p>
                     </div>
-                    <div>
-                      <span className="text-sm text-muted-foreground">AI ball</span>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span
-                          className={`text-2xl font-bold ${getAiScoreColor(selectedYouth.aiScore)}`}
-                        >
-                          {selectedYouth.aiScore}%
-                        </span>
-                        <Progress value={selectedYouth.aiScore} className="flex-1" />
+                    {selectedYouth.notes && (
+                      <div>
+                        <span className="text-sm text-muted-foreground">Izoh</span>
+                        <p className="text-sm">{selectedYouth.notes}</p>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
-
-                {/* Inline notes — masul_hodim only; autosaves on blur */}
-                {isMasul && (
-                  <div className="space-y-2 pt-4 border-t">
-                    <Label htmlFor="youth-notes" className="flex items-center gap-1.5">
-                      <Activity className="h-3.5 w-3.5" />
-                      Mas'ul eslatmalar
-                      <span className="text-xs text-muted-foreground font-normal ml-1">(blur saqlaydi)</span>
-                    </Label>
-                    <Textarea
-                      id="youth-notes"
-                      defaultValue={selectedYouth.notes || ""}
-                      placeholder="Bu yosh haqida shaxsiy eslatmalar..."
-                      rows={4}
-                      onBlur={(e) => {
-                        const val = e.target.value;
-                        if (val !== selectedYouth.notes) {
-                          updateYouth(selectedYouth.id, { notes: val });
-                        }
-                      }}
-                    />
-                  </div>
-                )}
               </TabsContent>
-              <TabsContent value="plans" className="mt-4">
-                <div className="text-center py-8 text-muted-foreground">
-                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  {selectedYouth.plansCount > 0 ? (
-                    <p>
-                      {selectedYouth.plansCount} ta reja mavjud. Rejalar sahifasida ko'ring.
-                    </p>
-                  ) : (
-                    <p>Hozircha rejalar yo'q</p>
-                  )}
-                  <Button
-                    variant="outline"
-                    className="mt-4 bg-transparent"
-                    onClick={() => setCurrentPage("rejalar")}
-                  >
-                    Rejalarga o'tish
+              <TabsContent value="navigation" className="mt-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <Button variant="outline" className="bg-transparent" onClick={() => setCurrentPage("rejalar")}>
+                    <FileText className="h-4 w-4 mr-2" />Rejalar
                   </Button>
-                </div>
-              </TabsContent>
-              <TabsContent value="meetings" className="mt-4">
-                <div className="text-center py-8 text-muted-foreground">
-                  <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  {selectedYouth.meetingsCount > 0 ? (
-                    <p>
-                      {selectedYouth.meetingsCount} ta uchrashuv mavjud. Uchrashuvlar sahifasida
-                      ko'ring.
-                    </p>
-                  ) : (
-                    <p>Hozircha uchrashuvlar yo'q</p>
-                  )}
-                  <Button
-                    variant="outline"
-                    className="mt-4 bg-transparent"
-                    onClick={() => setCurrentPage("uchrashuvlar")}
-                  >
-                    Uchrashuvlarga o'tish
+                  <Button variant="outline" className="bg-transparent" onClick={() => setCurrentPage("uchrashuvlar")}>
+                    <Calendar className="h-4 w-4 mr-2" />Uchrashuvlar
                   </Button>
                 </div>
               </TabsContent>
@@ -800,32 +662,16 @@ export function AdminYoshlarPage() {
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="edit-fullName">F.I.O</Label>
-                  <Input
-                    id="edit-fullName"
-                    name="fullName"
-                    defaultValue={selectedYouth.fullName}
-                    required
-                  />
+                  <Input id="edit-fullName" name="fullName" defaultValue={selectedYouth.fullName} required />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="edit-birthDate">Tug'ilgan sana</Label>
-                    <Input
-                      id="edit-birthDate"
-                      name="birthDate"
-                      type="date"
-                      defaultValue={selectedYouth.birthDate}
-                      required
-                    />
+                    <Input id="edit-birthDate" name="birthDate" type="date" defaultValue={selectedYouth.dateOfBirth ?? ""} />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="edit-phone">Telefon</Label>
-                    <Input
-                      id="edit-phone"
-                      name="phone"
-                      defaultValue={selectedYouth.phone}
-                      required
-                    />
+                    <Input id="edit-phone" name="phone" defaultValue={selectedYouth.contact ?? ""} />
                   </div>
                 </div>
                 <div className="grid gap-2">
@@ -833,43 +679,27 @@ export function AdminYoshlarPage() {
                   <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
                     <span>{selectedYouth.districtId}</span>
-                    <Badge variant="secondary" className="ml-auto text-xs">
-                      O'zgartirib bo'lmaydi
-                    </Badge>
+                    <Badge variant="secondary" className="ml-auto text-xs">O'zgartirib bo'lmaydi</Badge>
                   </div>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="edit-address">Manzil</Label>
-                  <Input
-                    id="edit-address"
-                    name="address"
-                    defaultValue={selectedYouth.address}
-                    required
-                  />
+                  <Input id="edit-address" name="address" defaultValue={selectedYouth.address ?? ""} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="edit-category">Kategoriya</Label>
-                  <Select name="category" defaultValue={selectedYouth.category}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select name="category" defaultValue={selectedYouth.category ?? ""}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {youthCategories.map((cat) => (
-                        <SelectItem key={cat} value={cat}>
-                          {cat}
-                        </SelectItem>
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsEditDialogOpen(false)}
-                  className="bg-transparent"
-                >
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="bg-transparent">
                   Bekor qilish
                 </Button>
                 <Button type="submit" disabled={isLoading}>
@@ -881,13 +711,13 @@ export function AdminYoshlarPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Assign Youth Dialog */}
+      {/* Assign Dialog */}
       <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Mas'ulga biriktirish</DialogTitle>
             <DialogDescription>
-              {selectedYouth?.fullName} - {selectedYouth?.districtId}
+              {selectedYouth?.fullName} — {selectedYouth?.districtId}
             </DialogDescription>
           </DialogHeader>
           {selectedYouth && (
@@ -897,41 +727,24 @@ export function AdminYoshlarPage() {
                   <AlertTriangle className="h-4 w-4 text-orange-500 mt-0.5" />
                   <div className="text-sm">
                     <p className="font-medium text-orange-800">Muhim eslatma</p>
-                    <p className="text-orange-600">
-                      Yoshni faqat o'z tumanidagi mas'ulga biriktirish mumkin.
-                    </p>
+                    <p className="text-orange-600">Yoshni faqat o'z tumanidagi mas'ulga biriktirish mumkin.</p>
                   </div>
                 </div>
               </div>
-
               <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
                 <MapPin className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">
-                  Yoshning tumani: <strong>{selectedYouth.districtId}</strong>
-                </span>
+                <span className="text-sm">Yoshning tumani: <strong>{selectedYouth.districtId}</strong></span>
               </div>
-
               <div className="grid gap-2">
                 <Label>Mas'ul hodim</Label>
                 <Select value={selectedMasulId} onValueChange={setSelectedMasulId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Mas'ulni tanlang" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Mas'ulni tanlang" /></SelectTrigger>
                   <SelectContent>
-                    {getAvailableMasullar(selectedYouth).length === 0 ? (
-                      <div className="p-4 text-center text-sm text-muted-foreground">
-                        Bu tumanda mas'ul hodim yo'q
-                      </div>
+                    {assignableMasullar.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">Bu tumanda mas'ul hodim yo'q</div>
                     ) : (
-                      getAvailableMasullar(selectedYouth).map((masul) => (
-                        <SelectItem key={masul.id} value={masul.id}>
-                          <div className="flex items-center gap-2">
-                            <span>{masul.fullName}</span>
-                            <Badge variant="secondary" className="text-xs">
-                              {masul.assignedYouthCount} yosh
-                            </Badge>
-                          </div>
-                        </SelectItem>
+                      assignableMasullar.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>{m.fullName}</SelectItem>
                       ))
                     )}
                   </SelectContent>
@@ -940,14 +753,7 @@ export function AdminYoshlarPage() {
             </div>
           )}
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsAssignDialogOpen(false);
-                setSelectedMasulId("");
-              }}
-              className="bg-transparent"
-            >
+            <Button variant="outline" onClick={() => { setIsAssignDialogOpen(false); setSelectedMasulId(""); }} className="bg-transparent">
               Bekor qilish
             </Button>
             <Button onClick={handleAssignYouth} disabled={isLoading || !selectedMasulId}>
@@ -957,33 +763,25 @@ export function AdminYoshlarPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Remove Youth Dialog */}
+      {/* Remove Dialog */}
       <AlertDialog open={isRemoveDialogOpen} onOpenChange={setIsRemoveDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Yoshni ro'yxatdan chiqarish</AlertDialogTitle>
             <AlertDialogDescription>
-              {selectedYouth?.fullName} yoshlar ro'yxatidan chiqariladi. Bu amalni ortga qaytarib
-              bo'lmaydi.
+              {selectedYouth?.fullName} yoshlar ro'yxatidan chiqariladi.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4">
             <Label htmlFor="removeReason">Chiqarish sababi *</Label>
             <Textarea
-              id="removeReason"
-              value={removeReason}
+              id="removeReason" value={removeReason}
               onChange={(e) => setRemoveReason(e.target.value)}
-              placeholder="Sababni kiriting..."
-              className="mt-2"
+              placeholder="Sababni kiriting..." className="mt-2"
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={() => {
-                setRemoveReason("");
-                setSelectedYouth(null);
-              }}
-            >
+            <AlertDialogCancel onClick={() => { setRemoveReason(""); setSelectedYouth(null); }}>
               Bekor qilish
             </AlertDialogCancel>
             <AlertDialogAction
@@ -997,24 +795,17 @@ export function AdminYoshlarPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* AI Youth Analysis Dialog */}
+      {/* AI Analysis Dialog */}
       {selectedYouth && isAIAnalysisOpen && (
         <Dialog open={isAIAnalysisOpen} onOpenChange={setIsAIAnalysisOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>AI Tahlil</DialogTitle>
-              <DialogDescription>
-                {selectedYouth.fullName} ning AI tahlili
-              </DialogDescription>
+              <DialogDescription>{selectedYouth.fullName} ning AI tahlili</DialogDescription>
             </DialogHeader>
-            <AIYouthAnalysis youth={selectedYouth} />
+            <AIYouthAnalysis youth={selectedYouth as never} />
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsAIAnalysisOpen(false)}
-                className="bg-transparent"
-              >
+              <Button type="button" variant="outline" onClick={() => setIsAIAnalysisOpen(false)} className="bg-transparent">
                 Yopish
               </Button>
             </DialogFooter>

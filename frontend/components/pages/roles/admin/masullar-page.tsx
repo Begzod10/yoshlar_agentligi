@@ -1,17 +1,16 @@
 "use client";
 
-import React from "react"
-
-import { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/lib/app-context";
-import { useOrganizations } from "@/lib/api/hooks/use-core-api";
-import type { Masul, ToshkentDistrict } from "@/lib/types";
+import { adminApi } from "@/lib/api/client";
+import type { MasulRead, OrganizationRead } from "@/lib/api/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -51,29 +50,18 @@ import {
   Eye,
   Edit,
   Trash2,
-  Download,
   UserCheck,
   Users,
-  Award,
-  FileText,
-  Calendar,
   MapPin,
   Phone,
   Mail,
+  Loader2,
+  KeyRound,
 } from "lucide-react";
-import { useDistricts } from "@/lib/api/hooks/use-districts";
 
 export function AdminMasullarPage() {
-  const {
-    currentUser,
-    masullar,
-    organizations,
-    addMasul,
-    updateMasul,
-    deleteMasul,
-    selectedDistrict,
-    showToast,
-  } = useApp();
+  const { currentUser, addToast } = useApp();
+  const queryClient = useQueryClient();
 
   const isAdmin = currentUser?.role === "admin";
   const isDirektor = currentUser?.role === "direktor";
@@ -81,155 +69,173 @@ export function AdminMasullarPage() {
   const canAdd = isAdmin || isDirektor || isTashkilotDirektor;
   const canEdit = isAdmin || isDirektor || isTashkilotDirektor;
 
+  // ── Data ──────────────────────────────────────────────────────────────
+  const { data: masullarData, isLoading } = useQuery({
+    queryKey: ["admin-masullar"],
+    queryFn: () =>
+      adminApi.get<{ data: MasulRead[]; total: number }>("/api/masullar", {
+        query: { page: 1, limit: 50 },
+      }),
+  });
+
+  const { data: orgsData } = useQuery({
+    queryKey: ["admin-all-orgs"],
+    queryFn: () =>
+      adminApi.get<{ data: OrganizationRead[]; total: number }>("/api/organizations", {
+        query: { page: 1, limit: 200 },
+      }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const allMasullar = masullarData?.data ?? [];
+
+  const orgMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const o of orgsData?.data ?? []) m[o.id] = o.name;
+    return m;
+  }, [orgsData]);
+
+  // ── Filter state ──────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
-  const [districtFilter, setDistrictFilter] = useState<string>("all");
-  const [orgFilter, setOrgFilter] = useState<string>("all");
+  const [districtFilter, setDistrictFilter] = useState("all");
+
+  // ── Dialog state ──────────────────────────────────────────────────────
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [selectedMasul, setSelectedMasul] = useState<Masul | null>(null);
-  const [addMasulDistrict, setAddMasulDistrict] = useState(
+  const [selectedMasul, setSelectedMasul] = useState<MasulRead | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<MasulRead | null>(null);
+  const [passwordMasul, setPasswordMasul] = useState<MasulRead | null>(null);
+  const [addDistrict, setAddDistrict] = useState(
     isTashkilotDirektor && currentUser?.districtId ? currentUser.districtId : ""
   );
-  const [addMasulOrganizationId, setAddMasulOrganizationId] = useState("");
+  const [addOrgId, setAddOrgId] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fire GET /api/masullar on mount
-  useOrganizations({
-    page: 1,
-    limit: 100,
-    districtId: addMasulDistrict || undefined,
-  });
-  const { data: districts = [] } = useDistricts();
+  // District-filtered orgs for add form
+  const addFormOrgs = useMemo(
+    () => (orgsData?.data ?? []).filter((o) => !addDistrict || o.districtId === addDistrict),
+    [orgsData, addDistrict]
+  );
 
-  // Filter masullar based on role and selection
-  let filteredMasullar = masullar.filter((m) => {
-    // Role-based filtering
+  // Edit form orgs: filtered by the selected masul's district
+  const editFormOrgs = useMemo(
+    () => (orgsData?.data ?? []).filter((o) => !selectedMasul || o.districtId === selectedMasul.districtId),
+    [orgsData, selectedMasul]
+  );
+
+  // ── Filtered list ─────────────────────────────────────────────────────
+  const filteredMasullar = allMasullar.filter((m) => {
     if (isTashkilotDirektor && currentUser?.districtId) {
       if (m.districtId !== currentUser.districtId) return false;
     }
-
-    // Global district filter
-    if (selectedDistrict !== "all" && m.districtId !== selectedDistrict) return false;
-
-    // Local filters
     if (districtFilter !== "all" && m.districtId !== districtFilter) return false;
-    if (orgFilter !== "all" && m.organizationId !== orgFilter) return false;
-
-    // Search filter
-    const matchesSearch =
-      m.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.phone.includes(searchQuery);
-
-    return matchesSearch;
+    const q = searchQuery.toLowerCase();
+    return (
+      m.fullName.toLowerCase().includes(q) ||
+      m.email.toLowerCase().includes(q) ||
+      (m.phone ?? "").includes(q)
+    );
   });
 
+  const availableDistricts =
+    isTashkilotDirektor && currentUser?.districtId
+      ? [currentUser.districtId]
+      : TOSHKENT_VILOYATI_DISTRICTS;
 
-  // Get available districts and organizations for filters
-  const availableDistricts = isTashkilotDirektor && currentUser?.districtId
-    ? [currentUser.districtId]
-    : TOSHKENT_VILOYATI_DISTRICTS;
-
-  const availableOrganizations = isTashkilotDirektor && currentUser?.districtId
-    ? organizations.filter((o) => o.districtId === currentUser.districtId)
-    : organizations;
-
-  const addMasulOrganizations = addMasulDistrict
-    ? organizations.filter((o) => o.districtId === addMasulDistrict)
-    : [];
-
-  const addMasulDistrictOptions =
-    districts.length > 0
-      ? districts
-      : TOSHKENT_VILOYATI_DISTRICTS.map((district) => ({ id: district, name: district }));
-
-  // Statistics
-  const totalMasullar = filteredMasullar.length;
-  const totalAssignedYouth = filteredMasullar.reduce((sum, m) => sum + m.assignedYouthCount, 0);
-  const averageAiScore = filteredMasullar.length > 0
-    ? Math.round(filteredMasullar.reduce((sum, m) => sum + m.aiScore, 0) / filteredMasullar.length)
-    : 0;
-
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return "text-accent";
-    if (score >= 60) return "text-warning";
-    return "text-destructive";
-  };
-
-  const handleAddMasul = (e: React.FormEvent<HTMLFormElement>) => {
+  // ── CRUD handlers ─────────────────────────────────────────────────────
+  const handleAddMasul = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const districtId = isTashkilotDirektor && currentUser?.districtId
-      ? currentUser.districtId
-      : addMasulDistrict;
-
-    const orgId = addMasulOrganizationId || (formData.get("organizationId") as string);
-    const org = organizations.find((o) => o.id === orgId);
-
-    if (!districtId || !orgId) return;
-
-    const newMasul: Omit<Masul, "id" | "createdAt"> = {
-      fullName: formData.get("fullName") as string,
-      email: formData.get("email") as string,
-      phone: formData.get("phone") as string,
-      districtId: districtId as ToshkentDistrict,
-      organizationId: orgId,
-      organizationName: org?.name || "",
-      assignedYouthCount: 0,
-      completedPlansCount: 0,
-      meetingsCount: 0,
-      aiScore: 50,
-    };
-
-    addMasul(newMasul);
-    handleAddDialogOpenChange(false);
-    showToast("Mas'ul hodim muvaffaqiyatli qo'shildi", "success");
+    const fd = new FormData(e.currentTarget);
+    const districtId =
+      isTashkilotDirektor && currentUser?.districtId ? currentUser.districtId : addDistrict;
+    if (!districtId) return;
+    try {
+      setIsSubmitting(true);
+      await adminApi.post("/api/masullar", {
+        fullName: fd.get("fullName") as string,
+        email: fd.get("email") as string,
+        password: fd.get("password") as string,
+        phone: (fd.get("phone") as string) || null,
+        districtId,
+        organizationId: addOrgId || null,
+        position: (fd.get("position") as string) || null,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["admin-masullar"] });
+      handleAddDialogOpenChange(false);
+      addToast({ title: "Mas'ul qo'shildi", type: "success" });
+    } catch {
+      addToast({ title: "Xatolik", description: "Mas'ul qo'shishda xato yuz berdi", type: "error" });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAddDialogOpenChange = (open: boolean) => {
     setIsAddDialogOpen(open);
     if (open) {
-      setAddMasulDistrict(
+      setAddDistrict(
         isTashkilotDirektor && currentUser?.districtId ? currentUser.districtId : ""
       );
-      setAddMasulOrganizationId("");
+      setAddOrgId("");
     }
   };
 
-  const handleEditMasul = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleEditMasul = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedMasul) return;
-
-    const formData = new FormData(e.currentTarget);
-    const districtId = isTashkilotDirektor && currentUser?.districtId
-      ? currentUser.districtId
-      : (formData.get("districtId") as ToshkentDistrict);
-
-    const orgId = formData.get("organizationId") as string;
-    const org = organizations.find((o) => o.id === orgId);
-
-    updateMasul(selectedMasul.id, {
-      fullName: formData.get("fullName") as string,
-      email: formData.get("email") as string,
-      phone: formData.get("phone") as string,
-      districtId,
-      organizationId: orgId,
-      organizationName: org?.name || "",
-    });
-
-    setIsEditDialogOpen(false);
-    setSelectedMasul(null);
-    showToast("Mas'ul hodim muvaffaqiyatli tahrirlandi", "success");
-  };
-
-  const handleDeleteMasul = (masul: Masul) => {
-    if (confirm(`"${masul.fullName}" mas'ul hodimni o'chirishni tasdiqlaysizmi?`)) {
-      deleteMasul(masul.id);
-      showToast("Mas'ul hodim o'chirildi", "success");
+    const fd = new FormData(e.currentTarget);
+    try {
+      setIsSubmitting(true);
+      await adminApi.patch(`/api/masullar/${selectedMasul.id}`, {
+        fullName: fd.get("fullName") as string,
+        email: fd.get("email") as string,
+        phone: (fd.get("phone") as string) || null,
+        organizationId: (fd.get("organizationId") as string) || null,
+        position: (fd.get("position") as string) || null,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["admin-masullar"] });
+      setIsEditDialogOpen(false);
+      setSelectedMasul(null);
+      addToast({ title: "Mas'ul tahrirlandi", type: "success" });
+    } catch {
+      addToast({ title: "Xatolik", description: "Tahrirlashda xato yuz berdi", type: "error" });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  console.log(selectedMasul)
+  const handleResetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!passwordMasul) return;
+    const fd = new FormData(e.currentTarget);
+    try {
+      setIsSubmitting(true);
+      await adminApi.patch(`/api/masullar/${passwordMasul.id}/password`, {
+        newPassword: fd.get("newPassword") as string,
+      });
+      setPasswordMasul(null);
+      addToast({ title: "Parol yangilandi", type: "success" });
+    } catch {
+      addToast({ title: "Xatolik", description: "Parolni yangilashda xato yuz berdi", type: "error" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const confirmDeleteMasul = async () => {
+    if (!deleteCandidate) return;
+    try {
+      await adminApi.delete(`/api/masullar/${deleteCandidate.id}`);
+      await queryClient.invalidateQueries({ queryKey: ["admin-masullar"] });
+      addToast({ title: "O'chirildi", type: "success" });
+    } catch {
+      addToast({ title: "Xatolik", description: "O'chirishda xato yuz berdi", type: "error" });
+    }
+    setDeleteCandidate(null);
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -248,8 +254,8 @@ export function AdminMasullarPage() {
         )}
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -258,30 +264,19 @@ export function AdminMasullarPage() {
             <UserCheck className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalMasullar}</div>
+            <div className="text-2xl font-bold">{filteredMasullar.length}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Biriktirilgan yoshlar
+              Tumanlar
             </CardTitle>
             <Users className="h-4 w-4 text-accent" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalAssignedYouth}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              O'rtacha AI ball
-            </CardTitle>
-            <Award className="h-4 w-4 text-chart-3" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${getScoreColor(averageAiScore)}`}>
-              {averageAiScore}%
+            <div className="text-2xl font-bold">
+              {new Set(filteredMasullar.map((m) => m.districtId)).size}
             </div>
           </CardContent>
         </Card>
@@ -307,36 +302,19 @@ export function AdminMasullarPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Barcha tumanlar</SelectItem>
-                  {availableDistricts.map((district) => (
-                    <SelectItem key={district} value={district}>
-                      {district}
+                  {availableDistricts.map((d) => (
+                    <SelectItem key={d} value={d}>
+                      {d}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             )}
-            <Select value={orgFilter} onValueChange={setOrgFilter}>
-              <SelectTrigger className="w-full md:w-[180px]">
-                <SelectValue placeholder="Tashkilot" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Barcha tashkilotlar</SelectItem>
-                {availableOrganizations.map((org) => (
-                  <SelectItem key={org.id} value={org.id}>
-                    {org.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button variant="outline">
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Masullar Table */}
+      {/* Table */}
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -345,15 +323,20 @@ export function AdminMasullarPage() {
                 <TableHead>Mas'ul hodim</TableHead>
                 <TableHead>Tuman</TableHead>
                 <TableHead>Tashkilot</TableHead>
-                <TableHead className="text-center">Yoshlar</TableHead>
-                <TableHead className="text-center">AI ball</TableHead>
+                <TableHead>Lavozim</TableHead>
                 <TableHead className="text-right">Amallar</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredMasullar.length === 0 ? (
+              {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+                  </TableCell>
+                </TableRow>
+              ) : filteredMasullar.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                     Mas'ul hodimlar topilmadi
                   </TableCell>
                 </TableRow>
@@ -378,18 +361,12 @@ export function AdminMasullarPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm">{masul.organizationName}</span>
+                      <span className="text-sm">
+                        {masul.organizationId ? (orgMap[masul.organizationId] ?? masul.organizationId.slice(0, 8) + "...") : "—"}
+                      </span>
                     </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="secondary">{masul.assignedYouthCount}</Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <Progress value={masul.aiScore} className="w-16 h-2" />
-                        <span className={`text-sm font-medium ${getScoreColor(masul.aiScore)}`}>
-                          {masul.aiScore}%
-                        </span>
-                      </div>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">{masul.position ?? "—"}</span>
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -413,7 +390,6 @@ export function AdminMasullarPage() {
                           {canEdit && (
                             <DropdownMenuItem
                               onClick={() => {
-                                console.log(masul.email , "masul")
                                 setSelectedMasul(masul);
                                 setIsEditDialogOpen(true);
                               }}
@@ -423,9 +399,15 @@ export function AdminMasullarPage() {
                             </DropdownMenuItem>
                           )}
                           {isAdmin && (
+                            <DropdownMenuItem onClick={() => setPasswordMasul(masul)}>
+                              <KeyRound className="mr-2 h-4 w-4" />
+                              Parolni o'zgartirish
+                            </DropdownMenuItem>
+                          )}
+                          {isAdmin && (
                             <DropdownMenuItem
                               className="text-destructive"
-                              onClick={() => handleDeleteMasul(masul)}
+                              onClick={() => setDeleteCandidate(masul)}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               O'chirish
@@ -442,41 +424,48 @@ export function AdminMasullarPage() {
         </CardContent>
       </Card>
 
-      {/* Add Masul Dialog */}
+      {/* Add Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={handleAddDialogOpenChange}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Yangi mas'ul hodim qo'shish</DialogTitle>
-            <DialogDescription>
-              Mas'ul hodim ma'lumotlarini kiriting
-            </DialogDescription>
+            <DialogDescription>Mas'ul hodim ma'lumotlarini kiriting</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAddMasul}>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="fullName">To'liq ism</Label>
+                <Label htmlFor="fullName">To'liq ism *</Label>
                 <Input id="fullName" name="fullName" required placeholder="F.I.O." />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">Email *</Label>
                   <Input id="email" name="email" type="email" required placeholder="email@example.com" />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="phone">Telefon</Label>
-                  <Input id="phone" name="phone" required placeholder="+998 XX XXX XX XX" />
+                  <Input id="phone" name="phone" placeholder="+998 XX XXX XX XX" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="password">Parol *</Label>
+                  <Input id="password" name="password" type="password" required minLength={6} placeholder="Kamida 6 belgi" />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="position">Lavozim</Label>
+                  <Input id="position-top" name="position" placeholder="Mas'ul hodim lavozimi" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 {!isTashkilotDirektor && (
                   <div className="grid gap-2">
-                    <Label htmlFor="districtId">Tuman</Label>
+                    <Label>Tuman *</Label>
                     <Select
-                      name="districtId"
-                      value={addMasulDistrict}
-                      onValueChange={(value) => {
-                        setAddMasulDistrict(value);
-                        setAddMasulOrganizationId("");
+                      value={addDistrict}
+                      onValueChange={(v) => {
+                        setAddDistrict(v);
+                        setAddOrgId("");
                       }}
                       required
                     >
@@ -484,9 +473,9 @@ export function AdminMasullarPage() {
                         <SelectValue placeholder="Tumanni tanlang" />
                       </SelectTrigger>
                       <SelectContent>
-                        {addMasulDistrictOptions.map((district) => (
-                          <SelectItem key={district.id} value={district.id}>
-                            {district.name}
+                        {TOSHKENT_VILOYATI_DISTRICTS.map((d) => (
+                          <SelectItem key={d} value={d}>
+                            {d}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -494,25 +483,21 @@ export function AdminMasullarPage() {
                   </div>
                 )}
                 <div className="grid gap-2">
-                  <Label htmlFor="organizationId">Tashkilot</Label>
+                  <Label>Tashkilot</Label>
                   <Select
-                    name="organizationId"
-                    value={addMasulOrganizationId}
-                    onValueChange={setAddMasulOrganizationId}
-                    disabled={!addMasulDistrict}
-                    required
+                    value={addOrgId}
+                    onValueChange={setAddOrgId}
+                    disabled={!addDistrict}
                   >
                     <SelectTrigger>
                       <SelectValue
-                        placeholder={
-                          addMasulDistrict ? "Tashkilotni tanlang" : "Avval tumanni tanlang"
-                        }
+                        placeholder={addDistrict ? "Tashkilotni tanlang" : "Avval tuman"}
                       />
                     </SelectTrigger>
                     <SelectContent>
-                      {addMasulOrganizations.map((org) => (
-                        <SelectItem key={org.id} value={org.id}>
-                          {org.name}
+                      {addFormOrgs.map((o) => (
+                        <SelectItem key={o.id} value={o.id}>
+                          {o.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -524,13 +509,16 @@ export function AdminMasullarPage() {
               <Button type="button" variant="outline" onClick={() => handleAddDialogOpenChange(false)}>
                 Bekor qilish
               </Button>
-              <Button type="submit">Qo'shish</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Qo'shish
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* View Masul Dialog */}
+      {/* View Dialog */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -551,45 +539,32 @@ export function AdminMasullarPage() {
                 </div>
               </div>
               <div className="grid gap-3">
-                <div className="flex items-center gap-2 py-2 border-b">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Email:</span>
-                  <span className="font-medium ml-auto">{selectedMasul.email}</span>
-                </div>
-                <div className="flex items-center gap-2 py-2 border-b">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Telefon:</span>
-                  <span className="font-medium ml-auto">{selectedMasul.phone}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Tashkilot</span>
-                  <span className="font-medium">{selectedMasul.organizationName}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Biriktirilgan yoshlar</span>
-                  <Badge>{selectedMasul.assignedYouthCount}</Badge>
-                </div>
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Bajarilgan rejalar</span>
-                  <Badge variant="secondary">{selectedMasul.completedPlansCount}</Badge>
-                </div>
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">O'tkazilgan uchrashuvlar</span>
-                  <Badge variant="secondary">{selectedMasul.meetingsCount}</Badge>
-                </div>
-                <div className="flex justify-between py-2">
-                  <span className="text-muted-foreground">AI samaradorlik balli</span>
-                  <span className={`font-bold ${getScoreColor(selectedMasul.aiScore)}`}>
-                    {selectedMasul.aiScore}%
-                  </span>
-                </div>
+                {[
+                  { icon: Mail, label: "Email", val: selectedMasul.email },
+                  { icon: Phone, label: "Telefon", val: selectedMasul.phone ?? "—" },
+                  {
+                    icon: null,
+                    label: "Tashkilot",
+                    val: selectedMasul.organizationId
+                      ? (orgMap[selectedMasul.organizationId] ?? "—")
+                      : "—",
+                  },
+                  { icon: null, label: "Lavozim", val: selectedMasul.position ?? "—" },
+                  { icon: null, label: "Qo'shilgan sana", val: selectedMasul.createdAt.slice(0, 10) },
+                ].map(({ icon: Icon, label, val }) => (
+                  <div key={label} className="flex items-center gap-2 py-2 border-b last:border-0">
+                    {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+                    <span className="text-muted-foreground">{label}:</span>
+                    <span className="font-medium ml-auto">{val}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Edit Masul Dialog */}
+      {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -600,77 +575,108 @@ export function AdminMasullarPage() {
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="edit-fullName">To'liq ism</Label>
-                  <Input
-                    id="edit-fullName"
-                    name="fullName"
-                    required
-                    defaultValue={selectedMasul.fullName}
-                  />
+                  <Input id="edit-fullName" name="fullName" required defaultValue={selectedMasul.fullName} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="edit-email">Email</Label>
-                    <Input
-                      id="edit-email"
-                      name="email"
-                      type="email"
-                      required
-                      defaultValue={selectedMasul.email}
-                    />
+                    <Input id="edit-email" name="email" type="email" defaultValue={selectedMasul.email} />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="edit-phone">Telefon</Label>
-                    <Input
-                      id="edit-phone"
-                      name="phone"
-                      required
-                      defaultValue={selectedMasul.phone}
-                    />
+                    <Input id="edit-phone" name="phone" defaultValue={selectedMasul.phone ?? ""} />
                   </div>
                 </div>
-                {!isTashkilotDirektor && (
-                  <div className="grid gap-2">
-                    <Label htmlFor="edit-districtId">Tuman</Label>
-                    <Select name="districtId" defaultValue={selectedMasul.districtId}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TOSHKENT_VILOYATI_DISTRICTS.map((district) => (
-                          <SelectItem key={district} value={district}>
-                            {district}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
                 <div className="grid gap-2">
-                  <Label htmlFor="edit-organizationId">Tashkilot</Label>
-                  <Select name="organizationId" defaultValue={selectedMasul.organizationId}>
+                  <Label>Tuman</Label>
+                  <div className="flex items-center gap-2 p-2 bg-muted rounded-md text-sm">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    {selectedMasul.districtId}
+                    <Badge variant="secondary" className="ml-auto text-xs">O'zgartirib bo'lmaydi</Badge>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-org">Tashkilot</Label>
+                  <Select name="organizationId" defaultValue={selectedMasul.organizationId ?? ""}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Tashkilotni tanlang" />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableOrganizations.map((org) => (
-                        <SelectItem key={org.id} value={org.id}>
-                          {org.name}
+                      <SelectItem value="">—</SelectItem>
+                      {editFormOrgs.map((o) => (
+                        <SelectItem key={o.id} value={o.id}>
+                          {o.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-position">Lavozim</Label>
+                  <Input id="edit-position" name="position" defaultValue={selectedMasul.position ?? ""} />
                 </div>
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                   Bekor qilish
                 </Button>
-                <Button type="submit">Saqlash</Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Saqlash
+                </Button>
               </DialogFooter>
             </form>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={Boolean(passwordMasul)} onOpenChange={(open) => !open && setPasswordMasul(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Parolni o'zgartirish</DialogTitle>
+            <DialogDescription>
+              {passwordMasul?.fullName} uchun yangi parol o'rnating
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleResetPassword}>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="newPassword">Yangi parol *</Label>
+                <Input
+                  id="newPassword"
+                  name="newPassword"
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="Kamida 6 belgi"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setPasswordMasul(null)}>
+                Bekor qilish
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Saqlash
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDeleteDialog
+        open={Boolean(deleteCandidate)}
+        title="Mas'ul hodimni o'chirish"
+        description={
+          deleteCandidate
+            ? `"${deleteCandidate.fullName}" mas'ul hodimni o'chirishni tasdiqlaysizmi? Bu amalni ortga qaytarib bo'lmaydi.`
+            : undefined
+        }
+        onConfirm={confirmDeleteMasul}
+        onCancel={() => setDeleteCandidate(null)}
+      />
     </div>
   );
 }

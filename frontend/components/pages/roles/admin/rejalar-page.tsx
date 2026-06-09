@@ -1,13 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import React, { useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/lib/app-context";
-import { api } from "@/lib/api/client";
-import { usePlans } from "@/lib/api/hooks/use-core-api";
-import type { PlanCreate, PlanRead } from "@/lib/api/types";
-import type { IndividualPlan } from "@/lib/types";
+import { adminApi } from "@/lib/api/client";
+import type { PlanRead, YouthRead, MasulRead } from "@/lib/api/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -51,7 +50,6 @@ import {
   MoreHorizontal,
   Eye,
   Trash2,
-  Download,
   FileText,
   CheckCircle,
   Clock,
@@ -79,36 +77,68 @@ interface AIPlanRecommendation {
 }
 
 export function AdminRejalarPage() {
-  const {
-    currentUser,
-    plans,
-    youth,
-    masullar,
-    updatePlan,
-    deletePlan,
-    getVisibleYouth,
-    selectedDistrict,
-    addToast,
-  } = useApp();
+  const { currentUser, addToast } = useApp();
   const queryClient = useQueryClient();
-
-  // Fire GET /api/plans on mount
-  usePlans({ page: 1, limit: 100 });
 
   const isAdmin = currentUser?.role === "admin";
   const isDirektor = currentUser?.role === "direktor";
   const isMasul = currentUser?.role === "masul_hodim";
   const isTashkilotDirektor = currentUser?.role === "tashkilot_direktori";
   const canAdd = isAdmin || isDirektor || isTashkilotDirektor || isMasul;
-  const canEdit = isAdmin || isDirektor || isTashkilotDirektor || isMasul;
   const canDelete = isAdmin || isDirektor;
 
+  // ── Data ──────────────────────────────────────────────────────────────
+  const { data: plansData, isLoading: plansLoading } = useQuery({
+    queryKey: ["admin-plans"],
+    queryFn: () =>
+      adminApi.get<{ data: PlanRead[]; total: number }>("/api/plans", {
+        query: { page: 1, limit: 50 },
+      }),
+  });
+
+  const { data: youthData } = useQuery({
+    queryKey: ["admin-all-youth-plans"],
+    queryFn: () =>
+      adminApi.get<{ data: YouthRead[]; total: number }>("/api/youth", {
+        query: { page: 1, limit: 500 },
+      }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: masullarData } = useQuery({
+    queryKey: ["admin-all-masullar-plans"],
+    queryFn: () =>
+      adminApi.get<{ data: MasulRead[]; total: number }>("/api/masullar", {
+        query: { page: 1, limit: 200 },
+      }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const allPlans = plansData?.data ?? [];
+
+  const youthMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const y of youthData?.data ?? []) m[y.id] = y.fullName;
+    return m;
+  }, [youthData]);
+
+  const masulMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const ms of masullarData?.data ?? []) m[ms.id] = ms.fullName;
+    return m;
+  }, [masullarData]);
+
+  const getYouthName = (id: string) => youthMap[id] ?? id.slice(0, 8) + "...";
+  const getMasulName = (plan: PlanRead) => plan.masulName ?? (plan.masulId ? (masulMap[plan.masulId] ?? "—") : "—");
+
+  // ── Filter state ──────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isProgressDialogOpen, setIsProgressDialogOpen] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<IndividualPlan | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<PlanRead | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<PlanRead | null>(null);
   const [progressValue, setProgressValue] = useState(0);
   const [progressComment, setProgressComment] = useState("");
 
@@ -120,37 +150,22 @@ export function AdminRejalarPage() {
   // Milestones for new plan form
   const [milestones, setMilestones] = useState<Milestone[]>([{ week: 1, target: "" }]);
 
-  // Get visible youth filtered by role
-  const ownYouth = getVisibleYouth();
+  // Add plan form state
+  const [formTitle, setFormTitle] = useState("");
+  const [formDescription, setFormDescription] = useState("");
+  const [formYouthId, setFormYouthId] = useState("");
+  const [formStartDate, setFormStartDate] = useState("");
+  const [formEndDate, setFormEndDate] = useState("");
 
-  const filteredYouth = isMasul
-    ? ownYouth
-    : youth.filter((y) => {
-        if (isTashkilotDirektor && currentUser?.districtId) {
-          return y.districtId === currentUser.districtId;
-        }
-        if (selectedDistrict && selectedDistrict !== "all") return y.districtId === selectedDistrict;
-        return true;
-      });
-
-  const youthIds = filteredYouth.map((y) => y.id);
-
-  let filteredPlans = plans.filter((p) => {
-    if (isMasul) {
-      if (p.masulId !== currentUser?.id) return false;
-    } else if (isTashkilotDirektor && currentUser?.districtId) {
-      if (!youthIds.includes(p.youthId)) return false;
-    } else if (selectedDistrict && selectedDistrict !== "all") {
-      if (!youthIds.includes(p.youthId)) return false;
-    }
-
+  // ── Filtered plans ────────────────────────────────────────────────────
+  const filteredPlans = allPlans.filter((p) => {
+    if (isMasul && p.masulId !== currentUser?.id) return false;
     if (statusFilter !== "all" && p.status !== statusFilter) return false;
-
-    const matchesSearch =
-      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.youthName.toLowerCase().includes(searchQuery.toLowerCase());
-
-    return matchesSearch;
+    const q = searchQuery.toLowerCase();
+    return (
+      p.title.toLowerCase().includes(q) ||
+      getYouthName(p.youthId).toLowerCase().includes(q)
+    );
   });
 
   const totalPlans = filteredPlans.length;
@@ -158,44 +173,40 @@ export function AdminRejalarPage() {
   const inProgressPlans = filteredPlans.filter((p) => p.status === "in_progress").length;
   const completionRate = totalPlans > 0 ? Math.round((completedPlans / totalPlans) * 100) : 0;
 
-  const getStatusBadge = (status: IndividualPlan["status"]) => {
+  // Youth list for the add form
+  const formYouthList = youthData?.data ?? [];
+
+  const getStatusBadge = (status: PlanRead["status"]) => {
     switch (status) {
       case "completed":
         return (
           <Badge className="bg-accent/10 text-accent border-accent/20">
-            <CheckCircle className="mr-1 h-3 w-3" />
-            Bajarilgan
+            <CheckCircle className="mr-1 h-3 w-3" />Bajarilgan
           </Badge>
         );
       case "in_progress":
         return (
           <Badge className="bg-primary/10 text-primary border-primary/20">
-            <PlayCircle className="mr-1 h-3 w-3" />
-            Jarayonda
+            <PlayCircle className="mr-1 h-3 w-3" />Jarayonda
           </Badge>
         );
-      case "planned":
+      case "draft":
         return (
           <Badge className="bg-muted text-muted-foreground">
-            <Clock className="mr-1 h-3 w-3" />
-            Rejalashtirilgan
+            <Clock className="mr-1 h-3 w-3" />Qoralama
           </Badge>
         );
       case "cancelled":
         return (
           <Badge className="bg-destructive/10 text-destructive border-destructive/20">
-            <XCircle className="mr-1 h-3 w-3" />
-            Bekor qilingan
+            <XCircle className="mr-1 h-3 w-3" />Bekor qilingan
           </Badge>
         );
     }
   };
 
-  // ─── AI Recommendation ──────────────────────────────────────────────────────
+  // ── AI Recommendation ─────────────────────────────────────────────────
   const fetchAIRecommendation = async (youthId: string) => {
-    const youthObj = filteredYouth.find((y) => y.id === youthId);
-    if (!youthObj) return;
-
     setAiLoading(true);
     setAiRecommendation(null);
     try {
@@ -204,18 +215,15 @@ export function AdminRejalarPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "plan-recommendation",
-          youthId: youthObj.id,
+          youthId,
           userId: currentUser?.id,
-          data: {
-            youth: youthObj,
-            existingPlans: plans.filter((p) => p.youthId === youthObj.id),
-          },
+          data: { youthId, existingPlans: allPlans.filter((p) => p.youthId === youthId) },
         }),
       });
       if (!res.ok) throw new Error("AI xizmati xatosi");
       const json = await res.json();
       setAiRecommendation(json.plan);
-    } catch (err) {
+    } catch {
       addToast({ title: "AI xatosi", description: "Tavsiya olishda xato yuz berdi", type: "error" });
     } finally {
       setAiLoading(false);
@@ -226,18 +234,10 @@ export function AdminRejalarPage() {
     if (!aiRecommendation) return;
     setMilestones(aiRecommendation.milestones);
     setIsAddDialogOpen(true);
-    // Pre-fill title / description via refs would require uncontrolled forms; we store in state instead
     addToast({ title: "AI tavsiyasi qabul qilindi", description: "Formani tekshirib, saqlang", type: "info" });
   };
 
-  // ─── Add Plan ────────────────────────────────────────────────────────────────
-  const [formTitle, setFormTitle] = useState("");
-  const [formDescription, setFormDescription] = useState("");
-  const [formYouthId, setFormYouthId] = useState("");
-  const [formMasulId, setFormMasulId] = useState("");
-  const [formStartDate, setFormStartDate] = useState("");
-  const [formEndDate, setFormEndDate] = useState("");
-
+  // ── Add Plan ──────────────────────────────────────────────────────────
   const openAddDialog = () => {
     if (aiRecommendation) {
       setFormTitle(aiRecommendation.title);
@@ -249,7 +249,6 @@ export function AdminRejalarPage() {
       setMilestones([{ week: 1, target: "" }]);
     }
     setFormYouthId(selectedYouthForAI || "");
-    setFormMasulId("");
     setFormStartDate("");
     setFormEndDate("");
     setIsAddDialogOpen(true);
@@ -260,7 +259,6 @@ export function AdminRejalarPage() {
       addToast({ title: "Xatolik", description: "Majburiy maydonlarni to'ldiring", type: "error" });
       return;
     }
-
     const planMilestones = milestones
       .filter((item) => item.target.trim())
       .map((item) => ({
@@ -270,54 +268,73 @@ export function AdminRejalarPage() {
         notes: item.notes?.trim() || null,
       }));
 
-    const payload: PlanCreate = {
+    const payload: Record<string, unknown> = {
       youthId: formYouthId,
-      masulId: formMasulId || null,
       title: formTitle,
       goal: formDescription || null,
       startDate: formStartDate || null,
       endDate: formEndDate || null,
     };
-
-    if (planMilestones.length > 0) {
-      payload.milestones = planMilestones;
-    }
+    if (planMilestones.length > 0) payload.milestones = planMilestones;
 
     try {
-      await api.post<PlanRead>("/api/plans", payload);
-      await queryClient.invalidateQueries({ queryKey: ["plans"] });
-      addToast({ title: "Reja qo'shildi", description: "Reja backendga saqlandi", type: "success" });
+      await adminApi.post<PlanRead>("/api/plans", payload);
+      await queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
+      addToast({ title: "Reja qo'shildi", type: "success" });
       setIsAddDialogOpen(false);
       setAiRecommendation(null);
       setSelectedYouthForAI("");
     } catch {
-      addToast({ title: "Backendga saqlanmadi", description: "Reja APIga yuborilmadi", type: "error" });
+      addToast({ title: "Xatolik", description: "Reja qo'shishda xato yuz berdi", type: "error" });
     }
   };
 
-  // ─── Update Progress ─────────────────────────────────────────────────────────
-  const openProgressDialog = (plan: IndividualPlan) => {
+  // ── Update Progress ───────────────────────────────────────────────────
+  const openProgressDialog = (plan: PlanRead) => {
     setSelectedPlan(plan);
     setProgressValue(plan.progress);
     setProgressComment("");
     setIsProgressDialogOpen(true);
   };
 
-  const handleUpdateProgress = () => {
+  const handleUpdateProgress = async () => {
     if (!selectedPlan) return;
-    updatePlan(selectedPlan.id, {
-      progress: progressValue,
-      status: progressValue === 100 ? "completed" : "in_progress",
-    });
-    setIsProgressDialogOpen(false);
-  };
-
-  const handleDeletePlan = (plan: IndividualPlan) => {
-    if (confirm(`"${plan.title}" rejasini o'chirishni tasdiqlaysizmi?`)) {
-      deletePlan(plan.id);
+    try {
+      await adminApi.patch(`/api/plans/${selectedPlan.id}`, {
+        progress: progressValue,
+        status: progressValue === 100 ? "completed" : "in_progress",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
+      setIsProgressDialogOpen(false);
+      addToast({ title: "Progress yangilandi", type: "success" });
+    } catch {
+      addToast({ title: "Xatolik", description: "Progressni yangilashda xato", type: "error" });
     }
   };
 
+  const handleMarkCompleted = async (plan: PlanRead) => {
+    try {
+      await adminApi.patch(`/api/plans/${plan.id}`, { status: "completed", progress: 100 });
+      await queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
+      addToast({ title: "Bajarildi deb belgilandi", type: "success" });
+    } catch {
+      addToast({ title: "Xatolik", description: "Holatni yangilashda xato", type: "error" });
+    }
+  };
+
+  const confirmDeletePlan = async () => {
+    if (!deleteCandidate) return;
+    try {
+      await adminApi.delete(`/api/plans/${deleteCandidate.id}`);
+      await queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
+      addToast({ title: "O'chirildi", type: "success" });
+    } catch {
+      addToast({ title: "Xatolik", description: "O'chirishda xato yuz berdi", type: "error" });
+    }
+    setDeleteCandidate(null);
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -336,7 +353,7 @@ export function AdminRejalarPage() {
         )}
       </div>
 
-      {/* AI Recommendation panel (masul_hodim) */}
+      {/* AI panel for masul_hodim */}
       {isMasul && (
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader className="pb-3">
@@ -347,38 +364,30 @@ export function AdminRejalarPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col sm:flex-row gap-3">
-              <Select
-                value={selectedYouthForAI}
-                onValueChange={setSelectedYouthForAI}
-              >
+              <Select value={selectedYouthForAI} onValueChange={setSelectedYouthForAI}>
                 <SelectTrigger className="flex-1" id="ai-youth-select">
                   <SelectValue placeholder="Yosh tanlang..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {ownYouth.map((y) => (
-                    <SelectItem key={y.id} value={y.id}>
-                      {y.fullName} — {y.category}
-                    </SelectItem>
-                  ))}
+                  {formYouthList
+                    .filter((y) => !isMasul || y.masulId === currentUser?.id)
+                    .map((y) => (
+                      <SelectItem key={y.id} value={y.id}>
+                        {y.fullName} — {y.category ?? "—"}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               <Button
                 id="btn-ai-recommend"
-                variant="default"
                 disabled={!selectedYouthForAI || aiLoading}
                 onClick={() => fetchAIRecommendation(selectedYouthForAI)}
                 className="gap-2 shrink-0"
               >
-                {aiLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
+                {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {aiLoading ? "Tahlil qilinmoqda..." : "AI tavsiyasi"}
               </Button>
             </div>
-
-            {/* AI result card */}
             {aiRecommendation && (
               <div className="mt-4 p-4 rounded-lg border border-primary/20 bg-background space-y-3">
                 <div className="flex items-start justify-between gap-2">
@@ -386,14 +395,10 @@ export function AdminRejalarPage() {
                     <p className="font-semibold text-sm">{aiRecommendation.title}</p>
                     <p className="text-xs text-muted-foreground mt-1">{aiRecommendation.description}</p>
                   </div>
-                  <button
-                    onClick={() => setAiRecommendation(null)}
-                    className="text-muted-foreground hover:text-foreground shrink-0"
-                  >
+                  <button onClick={() => setAiRecommendation(null)} className="text-muted-foreground hover:text-foreground shrink-0">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-
                 {aiRecommendation.milestones.length > 0 && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-2">Bosqichlar:</p>
@@ -407,7 +412,6 @@ export function AdminRejalarPage() {
                     </div>
                   </div>
                 )}
-
                 {aiRecommendation.expectedOutcomes.length > 0 && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-1">Kutilayotgan natijalar:</p>
@@ -421,13 +425,7 @@ export function AdminRejalarPage() {
                     </ul>
                   </div>
                 )}
-
-                <Button
-                  id="btn-accept-ai-plan"
-                  size="sm"
-                  className="w-full gap-2"
-                  onClick={acceptAIRecommendation}
-                >
+                <Button id="btn-accept-ai-plan" size="sm" className="w-full gap-2" onClick={acceptAIRecommendation}>
                   <CheckCircle className="h-3.5 w-3.5" />
                   Qabul qilish va formani to'ldirish
                 </Button>
@@ -437,7 +435,7 @@ export function AdminRejalarPage() {
         </Card>
       )}
 
-      {/* Statistics Cards */}
+      {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -499,7 +497,7 @@ export function AdminRejalarPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Barcha holatlar</SelectItem>
-                <SelectItem value="planned">Rejalashtirilgan</SelectItem>
+                <SelectItem value="draft">Qoralama</SelectItem>
                 <SelectItem value="in_progress">Jarayonda</SelectItem>
                 <SelectItem value="completed">Bajarilgan</SelectItem>
                 <SelectItem value="cancelled">Bekor qilingan</SelectItem>
@@ -525,7 +523,13 @@ export function AdminRejalarPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredPlans.length === 0 ? (
+              {plansLoading ? (
+                <TableRow>
+                  <TableCell colSpan={isMasul ? 6 : 7} className="text-center py-8 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+                  </TableCell>
+                </TableRow>
+              ) : filteredPlans.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={isMasul ? 6 : 7} className="text-center py-8 text-muted-foreground">
                     Rejalar topilmadi
@@ -541,22 +545,22 @@ export function AdminRejalarPage() {
                         </div>
                         <div>
                           <p className="font-medium">{plan.title}</p>
-                          <p className="text-sm text-muted-foreground line-clamp-1">{plan.description}</p>
+                          <p className="text-sm text-muted-foreground line-clamp-1">{plan.goal ?? "—"}</p>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">{plan.youthName}</span>
+                      <span className="font-medium">{getYouthName(plan.youthId)}</span>
                     </TableCell>
                     {!isMasul && (
                       <TableCell>
-                        <span className="text-sm">{plan.masulName}</span>
+                        <span className="text-sm">{getMasulName(plan)}</span>
                       </TableCell>
                     )}
                     <TableCell>
                       <div className="text-sm">
-                        <p>{plan.startDate}</p>
-                        <p className="text-muted-foreground">{plan.endDate}</p>
+                        <p>{plan.startDate ?? "—"}</p>
+                        <p className="text-muted-foreground">{plan.endDate ?? "—"}</p>
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
@@ -585,16 +589,14 @@ export function AdminRejalarPage() {
                             <Eye className="mr-2 h-4 w-4" />
                             Ko'rish
                           </DropdownMenuItem>
-                          {canEdit && plan.status !== "completed" && (
+                          {plan.status !== "completed" && (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => openProgressDialog(plan)}>
                                 <PlayCircle className="mr-2 h-4 w-4" />
                                 Progressni yangilash
                               </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => updatePlan(plan.id, { status: "completed", progress: 100 })}
-                              >
+                              <DropdownMenuItem onClick={() => void handleMarkCompleted(plan)}>
                                 <CheckCircle className="mr-2 h-4 w-4" />
                                 Bajarildi
                               </DropdownMenuItem>
@@ -605,7 +607,7 @@ export function AdminRejalarPage() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive"
-                                onClick={() => handleDeletePlan(plan)}
+                                onClick={() => setDeleteCandidate(plan)}
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 O'chirish
@@ -625,12 +627,12 @@ export function AdminRejalarPage() {
 
       {/* Add Plan Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[560px] max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Yangi reja qo'shish</DialogTitle>
             <DialogDescription>Individual ishlash rejasini yarating</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-4 overflow-y-auto">
             <div className="grid gap-2">
               <Label htmlFor="plan-title">Reja nomi *</Label>
               <Input
@@ -641,7 +643,7 @@ export function AdminRejalarPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="plan-description">Tavsif</Label>
+              <Label htmlFor="plan-description">Maqsad</Label>
               <Textarea
                 id="plan-description"
                 value={formDescription}
@@ -650,111 +652,60 @@ export function AdminRejalarPage() {
                 rows={3}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="plan-youth">Yosh *</Label>
-                <Select
-                  value={formYouthId}
-                  onValueChange={(v) => { setFormYouthId(v); setFormMasulId(""); }}
-                >
-                  <SelectTrigger id="plan-youth">
-                    <SelectValue placeholder="Yoshni tanlang" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredYouth.map((y) => (
-                      <SelectItem key={y.id} value={y.id}>
-                        {y.fullName}
+            <div className="grid gap-2">
+              <Label htmlFor="plan-youth">Yosh *</Label>
+              <Select value={formYouthId} onValueChange={setFormYouthId}>
+                <SelectTrigger id="plan-youth">
+                  <SelectValue placeholder="Yoshni tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {formYouthList
+                    .filter((y) => !isMasul || y.masulId === currentUser?.id)
+                    .map((y) => (
+                      <SelectItem key={y.id} value={y.id} disabled={!y.masulId}>
+                        <span className={!y.masulId ? "text-muted-foreground" : undefined}>
+                          {y.fullName}{!y.masulId && " (mas'ul yo'q)"}
+                        </span>
                       </SelectItem>
                     ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {!isMasul && (
-                <div className="grid gap-2">
-                  <Label htmlFor="plan-masul">Mas'ul hodim *</Label>
-                  <Select
-                    value={formMasulId}
-                    onValueChange={setFormMasulId}
-                    disabled={!formYouthId}
-                  >
-                    <SelectTrigger id="plan-masul">
-                      <SelectValue placeholder={formYouthId ? "Mas'ulni tanlang" : "Avval Yosh tanlang"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {masullar
-                        .filter((m) => {
-                          const youth = filteredYouth.find((y) => y.id === formYouthId);
-                          return youth ? m.districtId === youth.districtId : true;
-                        })
-                        .map((m) => (
-                          <SelectItem key={m.id} value={m.id}>
-                            {m.fullName}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="plan-start">Boshlanish sanasi *</Label>
-                <Input
-                  id="plan-start"
-                  type="date"
-                  value={formStartDate}
-                  onChange={(e) => setFormStartDate(e.target.value)}
-                />
+                <Input id="plan-start" type="date" value={formStartDate} onChange={(e) => setFormStartDate(e.target.value)} />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="plan-end">Tugash sanasi *</Label>
-                <Input
-                  id="plan-end"
-                  type="date"
-                  value={formEndDate}
-                  onChange={(e) => setFormEndDate(e.target.value)}
-                />
+                <Input id="plan-end" type="date" value={formEndDate} onChange={(e) => setFormEndDate(e.target.value)} />
               </div>
             </div>
-
             {/* Milestones */}
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
                 <Label>Bosqichlar (milestones)</Label>
                 <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs"
+                  type="button" variant="ghost" size="sm" className="h-7 text-xs"
                   onClick={() => setMilestones([...milestones, { week: milestones.length + 1, target: "", dueDate: "", notes: "" }])}
                 >
                   + Bosqich qo'shish
                 </Button>
               </div>
-              <div className="space-y-3">
+              <div className="overflow-y-auto max-h-[280px] space-y-3 pr-1">
                 {milestones.map((ms, idx) => (
                   <div key={idx} className="rounded-md border p-3 space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-medium text-muted-foreground">{ms.week}-hafta</span>
                       <div className="flex items-center gap-2 flex-1 justify-end">
                         <Input
-                          type="date"
-                          value={ms.dueDate || ""}
-                          onChange={(e) => {
-                            const updated = [...milestones];
-                            updated[idx] = { ...updated[idx], dueDate: e.target.value };
-                            setMilestones(updated);
-                          }}
+                          type="date" value={ms.dueDate || ""}
+                          onChange={(e) => { const u = [...milestones]; u[idx] = { ...u[idx], dueDate: e.target.value }; setMilestones(u); }}
                           className="text-sm h-7 w-36"
                         />
                         {milestones.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 shrink-0"
-                            onClick={() => setMilestones(milestones.filter((_, i) => i !== idx))}
-                          >
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                            onClick={() => setMilestones(milestones.filter((_, i) => i !== idx))}>
                             <X className="h-3.5 w-3.5" />
                           </Button>
                         )}
@@ -762,24 +713,9 @@ export function AdminRejalarPage() {
                     </div>
                     <Textarea
                       value={ms.target}
-                      onChange={(e) => {
-                        const updated = [...milestones];
-                        updated[idx] = { ...updated[idx], target: e.target.value };
-                        setMilestones(updated);
-                      }}
+                      onChange={(e) => { const u = [...milestones]; u[idx] = { ...u[idx], target: e.target.value }; setMilestones(u); }}
                       placeholder={`${ms.week}-hafta maqsadi`}
-                      className="text-sm min-h-[60px] resize-none"
-                      rows={2}
-                    />
-                    <Input
-                      value={ms.notes || ""}
-                      onChange={(e) => {
-                        const updated = [...milestones];
-                        updated[idx] = { ...updated[idx], notes: e.target.value };
-                        setMilestones(updated);
-                      }}
-                      placeholder="Izoh"
-                      className="text-sm h-8"
+                      className="text-sm min-h-[60px] resize-none" rows={2}
                     />
                   </div>
                 ))}
@@ -787,12 +723,8 @@ export function AdminRejalarPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-              Bekor qilish
-            </Button>
-            <Button id="btn-save-plan" onClick={handleAddPlan}>
-              Saqlash
-            </Button>
+            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Bekor qilish</Button>
+            <Button id="btn-save-plan" onClick={handleAddPlan}>Saqlash</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -814,24 +746,19 @@ export function AdminRejalarPage() {
                   {getStatusBadge(selectedPlan.status)}
                 </div>
               </div>
-              <p className="text-muted-foreground">{selectedPlan.description}</p>
+              {selectedPlan.goal && <p className="text-muted-foreground text-sm">{selectedPlan.goal}</p>}
               <div className="grid gap-3">
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Yosh</span>
-                  <span className="font-medium">{selectedPlan.youthName}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Mas'ul hodim</span>
-                  <span className="font-medium">{selectedPlan.masulName}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Boshlanish sanasi</span>
-                  <span className="font-medium">{selectedPlan.startDate}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Tugash sanasi</span>
-                  <span className="font-medium">{selectedPlan.endDate}</span>
-                </div>
+                {[
+                  { label: "Yosh", val: getYouthName(selectedPlan.youthId) },
+                  { label: "Mas'ul hodim", val: getMasulName(selectedPlan) },
+                  { label: "Boshlanish sanasi", val: selectedPlan.startDate ?? "—" },
+                  { label: "Tugash sanasi", val: selectedPlan.endDate ?? "—" },
+                ].map(({ label, val }) => (
+                  <div key={label} className="flex justify-between py-2 border-b last:border-0">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-medium">{val}</span>
+                  </div>
+                ))}
                 <div className="flex justify-between items-center py-2">
                   <span className="text-muted-foreground">Progress</span>
                   <div className="flex items-center gap-2">
@@ -859,19 +786,12 @@ export function AdminRejalarPage() {
                 <span className="text-2xl font-bold text-primary">{progressValue}%</span>
               </div>
               <input
-                id="progress-slider"
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                value={progressValue}
+                id="progress-slider" type="range" min={0} max={100} step={5} value={progressValue}
                 onChange={(e) => setProgressValue(Number(e.target.value))}
                 className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>0%</span>
-                <span>50%</span>
-                <span>100%</span>
+                <span>0%</span><span>50%</span><span>100%</span>
               </div>
             </div>
             {progressValue === 100 && (
@@ -883,24 +803,30 @@ export function AdminRejalarPage() {
             <div className="space-y-2">
               <Label htmlFor="progress-comment">Izoh (ixtiyoriy)</Label>
               <Textarea
-                id="progress-comment"
-                value={progressComment}
+                id="progress-comment" value={progressComment}
                 onChange={(e) => setProgressComment(e.target.value)}
-                placeholder="Bu yangilanish haqida qisqacha..."
-                rows={2}
+                placeholder="Bu yangilanish haqida qisqacha..." rows={2}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsProgressDialogOpen(false)}>
-              Bekor
-            </Button>
-            <Button id="btn-save-progress" onClick={handleUpdateProgress}>
-              Saqlash
-            </Button>
+            <Button variant="outline" onClick={() => setIsProgressDialogOpen(false)}>Bekor</Button>
+            <Button id="btn-save-progress" onClick={handleUpdateProgress}>Saqlash</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={Boolean(deleteCandidate)}
+        title="Rejani o'chirish"
+        description={
+          deleteCandidate
+            ? `"${deleteCandidate.title}" rejasini o'chirishni tasdiqlaysizmi? Bu amalni ortga qaytarib bo'lmaydi.`
+            : undefined
+        }
+        onConfirm={confirmDeletePlan}
+        onCancel={() => setDeleteCandidate(null)}
+      />
     </div>
   );
 }

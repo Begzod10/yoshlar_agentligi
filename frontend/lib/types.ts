@@ -124,7 +124,7 @@ export interface Meeting {
   photos?: string[];
 
   attendanceStatus?: "attended" | "no_show" | "rescheduled";
-  attachments?: string[];
+  attachments?: Array<string | { path: string; size: number; filename: string; content_type: string }>;
 
   createdAt: string;
   agenda?: string | null;

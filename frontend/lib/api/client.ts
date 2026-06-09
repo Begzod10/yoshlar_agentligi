@@ -112,3 +112,56 @@ export const api = {
   delete: <T>(path: string, opts?: RequestOptions) =>
     apiFetch<T>(path, { ...opts, method: "DELETE" }),
 };
+
+// ── Admin API client (no key transformation) ──────────────────────────────────
+// Keys are sent and received as-is (snake_case from the backend stays snake_case).
+
+export async function adminApiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { body, headers, query, ...rest } = options;
+  const token = getAccessToken();
+
+  const url = new URL(path.startsWith("http") ? path : `${config.apiUrl}${path}`);
+  if (query) {
+    for (const [k, v] of Object.entries(query)) {
+      if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+    }
+  }
+
+  const res = await fetch(url.toString(), {
+    ...rest,
+    headers: {
+      Accept: "application/json",
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => null)) as ApiErrorBody | null;
+    throw new ApiError(
+      payload?.error?.code ?? "unknown_error",
+      payload?.error?.message ?? res.statusText,
+      res.status,
+    );
+  }
+
+  if (res.status === 204) return undefined as T;
+
+  return res.json() as Promise<T>;
+}
+
+export const adminApi = {
+  get: <T>(path: string, opts?: RequestOptions) =>
+    adminApiFetch<T>(path, { ...opts, method: "GET" }),
+  post: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
+    adminApiFetch<T>(path, { ...opts, method: "POST", body }),
+  patch: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
+    adminApiFetch<T>(path, { ...opts, method: "PATCH", body }),
+  put: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
+    adminApiFetch<T>(path, { ...opts, method: "PUT", body }),
+  delete: <T>(path: string, opts?: RequestOptions) =>
+    adminApiFetch<T>(path, { ...opts, method: "DELETE" }),
+};

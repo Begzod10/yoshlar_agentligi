@@ -100,10 +100,15 @@ export interface MasulRead {
   createdAt: string;
 }
 
-export type MasulCreate = Pick<MasulRead, "fullName" | "districtId"> &
-  Partial<Pick<MasulRead, "organizationId" | "phone" | "email" | "position">>;
+export type MasulCreate = Pick<MasulRead, "fullName" | "districtId"> & {
+  password: string;
+} & Partial<Pick<MasulRead, "organizationId" | "phone" | "email" | "position">>;
 
-export type MasulUpdate = Partial<Omit<MasulCreate, "districtId">>;
+export type MasulUpdate = Partial<Omit<MasulCreate, "districtId" | "password">>;
+
+export interface MasulPasswordReset {
+  newPassword: string;
+}
 
 export type YouthStatus = "active" | "graduated" | "removed";
 
@@ -112,6 +117,7 @@ export interface YouthRead {
   fullName: string;
   districtId: string;
   masulId: string | null;
+  masulName: string | null;
   organizationId: string | null;
   status: YouthStatus;
   category: string | null;
@@ -146,6 +152,7 @@ export interface PlanRead {
   id: string;
   youthId: string;
   masulId: string | null;
+  masulName: string | null;
   title: string;
   goal: string | null;
   milestones: Record<string, unknown>[];
@@ -173,23 +180,33 @@ export type PlanUpdate = Partial<Omit<PlanCreate, "youthId"> & {
 
 export type MeetingAttendance = "scheduled" | "attended" | "no_show" | "rescheduled";
 
+export interface MeetingAttachment {
+  path: string;
+  size: number;
+  filename: string;
+  content_type: string;
+}
+
 export interface MeetingRead {
   id: string;
   youthId: string;
   masulId: string | null;
+  masulName: string | null;
   scheduledAt: string;
   type: string | null;
   location: string | null;
   agenda: string | null;
   attendanceStatus: MeetingAttendance;
   attendanceNotes: string | null;
-  attachments: Record<string, unknown>[];
+  attachments: MeetingAttachment[];
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface MeetingCreate {
   youthId: string;
   scheduledAt: string;
+  masulId?: string | null;
   type?: string | null;
   location?: string | null;
   agenda?: string | null;
