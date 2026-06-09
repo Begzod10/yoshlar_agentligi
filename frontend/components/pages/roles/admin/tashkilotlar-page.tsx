@@ -193,7 +193,7 @@ export function AdminTashkilotlarPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -255,6 +255,7 @@ export function AdminTashkilotlarPage() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -351,6 +352,7 @@ export function AdminTashkilotlarPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

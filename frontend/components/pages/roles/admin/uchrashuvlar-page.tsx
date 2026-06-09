@@ -515,6 +515,7 @@ export function AdminUchrashuvlarPage() {
       {/* Meetings Table */}
       <Card>
         <CardContent className="p-0">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -619,6 +620,7 @@ export function AdminUchrashuvlarPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
