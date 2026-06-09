@@ -1,4 +1,4 @@
-from sqlalchemy import case, cast, func, select, Float
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import MeetingAttendance, PlanStatus, YouthStatus
@@ -6,7 +6,17 @@ from app.modules.masullar.models import Masul
 from app.modules.meetings.models import Meeting
 from app.modules.organizations.models import Organization
 from app.modules.plans.models import Plan
-from app.modules.stats.schemas import AgencyStats, CompareResult, DistrictStatsRow, TrendPoint
+from app.modules.audit.models import AuditLog
+from app.modules.stats.schemas import (
+    AgencyStats,
+    AiInsight,
+    CategoryStat,
+    CompareResult,
+    DistrictStatsRow,
+    RecentActivityRow,
+    TopYoshRow,
+    TrendPoint,
+)
 from app.modules.youth.models import Youth
 
 
@@ -20,23 +30,27 @@ class StatsService:
             func.count().filter(Youth.status == YouthStatus.ACTIVE).label("active"),
             func.count().filter(Youth.status == YouthStatus.GRADUATED).label("graduated"),
             func.count().filter(Youth.status == YouthStatus.REMOVED).label("removed"),
-        )
+        ).where(Youth.deleted_at.is_(None))
         yr = (await self._session.execute(youth_q)).one()
 
-        org_count = (await self._session.execute(select(func.count(Organization.id)))).scalar_one()
-        masul_count = (await self._session.execute(select(func.count(Masul.id)))).scalar_one()
+        org_count = (await self._session.execute(
+            select(func.count(Organization.id)).where(Organization.deleted_at.is_(None))
+        )).scalar_one()
+        masul_count = (await self._session.execute(
+            select(func.count(Masul.id)).where(Masul.deleted_at.is_(None))
+        )).scalar_one()
 
         plan_q = select(
             func.count(Plan.id).label("total"),
             func.count().filter(Plan.status == PlanStatus.COMPLETED).label("completed"),
             func.count().filter(Plan.status == PlanStatus.IN_PROGRESS).label("in_progress"),
-        )
+        ).where(Plan.deleted_at.is_(None))
         pr = (await self._session.execute(plan_q)).one()
 
         meeting_q = select(
             func.count(Meeting.id).label("total"),
             func.count().filter(Meeting.attendance_status == MeetingAttendance.ATTENDED).label("attended"),
-        )
+        ).where(Meeting.deleted_at.is_(None))
         mr = (await self._session.execute(meeting_q)).one()
 
         return AgencyStats(
@@ -61,18 +75,27 @@ class StatsService:
                 func.count().filter(Youth.status == YouthStatus.ACTIVE).label("active"),
                 func.count().filter(Youth.status == YouthStatus.GRADUATED).label("graduated"),
             )
+            .where(Youth.deleted_at.is_(None))
             .group_by(Youth.district_id)
         )
         if district_ids:
             youth_q = youth_q.where(Youth.district_id.in_(district_ids))
         youth_rows = {r.district_id: r for r in (await self._session.execute(youth_q)).all()}
 
-        org_q = select(Organization.district_id, func.count(Organization.id).label("cnt")).group_by(Organization.district_id)
+        org_q = (
+            select(Organization.district_id, func.count(Organization.id).label("cnt"))
+            .where(Organization.deleted_at.is_(None))
+            .group_by(Organization.district_id)
+        )
         if district_ids:
             org_q = org_q.where(Organization.district_id.in_(district_ids))
         org_rows = {r.district_id: r.cnt for r in (await self._session.execute(org_q)).all()}
 
-        masul_q = select(Masul.district_id, func.count(Masul.id).label("cnt")).group_by(Masul.district_id)
+        masul_q = (
+            select(Masul.district_id, func.count(Masul.id).label("cnt"))
+            .where(Masul.deleted_at.is_(None))
+            .group_by(Masul.district_id)
+        )
         if district_ids:
             masul_q = masul_q.where(Masul.district_id.in_(district_ids))
         masul_rows = {r.district_id: r.cnt for r in (await self._session.execute(masul_q)).all()}
@@ -141,20 +164,171 @@ class StatsService:
         ]
 
     async def trends(self, metric: str, granularity: str = "month") -> list[TrendPoint]:
+        _VALID_GRANULARITY = {"day", "week", "month", "year"}
+        if granularity not in _VALID_GRANULARITY:
+            granularity = "month"
+
         if metric == "youth":
-            model, date_col = Youth, Youth.created_at
+            model, date_col, deleted_col = Youth, Youth.created_at, Youth.deleted_at
         elif metric == "plans":
-            model, date_col = Plan, Plan.created_at
+            model, date_col, deleted_col = Plan, Plan.created_at, Plan.deleted_at
         elif metric == "meetings":
-            model, date_col = Meeting, Meeting.created_at
+            model, date_col, deleted_col = Meeting, Meeting.scheduled_at, Meeting.deleted_at
         else:
             return []
 
         trunc = func.date_trunc(granularity, date_col)
         stmt = (
             select(trunc.label("period"), func.count(model.id).label("value"))
+            .where(deleted_col.is_(None))
             .group_by(trunc)
             .order_by(trunc)
         )
         rows = (await self._session.execute(stmt)).all()
         return [TrendPoint(period=str(r.period), value=r.value) for r in rows]
+
+    async def by_category(self) -> list[CategoryStat]:
+        stmt = (
+            select(
+                Organization.type.label("category"),
+                func.count(Youth.id).label("total_youth"),
+            )
+            .select_from(Youth)
+            .join(Organization, Youth.organization_id == Organization.id, isouter=True)
+            .where(Youth.deleted_at.is_(None))
+            .group_by(Organization.type)
+            .order_by(func.count(Youth.id).desc())
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return [
+            CategoryStat(category=r.category or "Noma'lum", total_youth=r.total_youth)
+            for r in rows
+        ]
+
+    async def top_yoshlar(self, limit: int = 10) -> list[TopYoshRow]:
+        plan_total_q = (
+            select(Plan.youth_id, func.count(Plan.id).label("total"))
+            .where(Plan.deleted_at.is_(None))
+            .group_by(Plan.youth_id)
+            .subquery()
+        )
+        plan_done_q = (
+            select(Plan.youth_id, func.count(Plan.id).label("done"))
+            .where(Plan.deleted_at.is_(None), Plan.status == PlanStatus.COMPLETED)
+            .group_by(Plan.youth_id)
+            .subquery()
+        )
+        meeting_total_q = (
+            select(Meeting.youth_id, func.count(Meeting.id).label("total"))
+            .where(Meeting.deleted_at.is_(None))
+            .group_by(Meeting.youth_id)
+            .subquery()
+        )
+        meeting_done_q = (
+            select(Meeting.youth_id, func.count(Meeting.id).label("done"))
+            .where(Meeting.deleted_at.is_(None), Meeting.attendance_status == MeetingAttendance.ATTENDED)
+            .group_by(Meeting.youth_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                Youth,
+                func.coalesce(plan_total_q.c.total, 0).label("total_plans"),
+                func.coalesce(plan_done_q.c.done, 0).label("completed_plans"),
+                func.coalesce(meeting_total_q.c.total, 0).label("total_meetings"),
+                func.coalesce(meeting_done_q.c.done, 0).label("attended_meetings"),
+            )
+            .where(Youth.deleted_at.is_(None))
+            .outerjoin(plan_total_q, Youth.id == plan_total_q.c.youth_id)
+            .outerjoin(plan_done_q, Youth.id == plan_done_q.c.youth_id)
+            .outerjoin(meeting_total_q, Youth.id == meeting_total_q.c.youth_id)
+            .outerjoin(meeting_done_q, Youth.id == meeting_done_q.c.youth_id)
+        )
+        rows = (await self._session.execute(stmt)).all()
+
+        results = []
+        for r in rows:
+            y = r[0]
+            tp, cp, tm, am = r[1], r[2], r[3], r[4]
+            plan_score = (cp / tp * 60) if tp else 0
+            meet_score = (am / tm * 40) if tm else 0
+            ai_score = round((plan_score + meet_score) * 100) / 100
+            results.append(TopYoshRow(
+                id=y.id,
+                full_name=y.full_name,
+                district_id=y.district_id,
+                organization_id=y.organization_id,
+                masul_id=y.masul_id,
+                status=y.status,
+                total_plans=tp,
+                completed_plans=cp,
+                total_meetings=tm,
+                attended_meetings=am,
+                ai_score=ai_score,
+            ))
+
+        results.sort(key=lambda x: x.ai_score, reverse=True)
+        return results[:limit]
+
+    async def recent_activity(self, limit: int = 20) -> list[RecentActivityRow]:
+        stmt = (
+            select(AuditLog)
+            .order_by(AuditLog.created_at.desc())
+            .limit(limit)
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [
+            RecentActivityRow(
+                id=r.id,
+                user_id=r.user_id,
+                role=r.role,
+                action=r.action,
+                entity_type=r.entity_type,
+                entity_id=r.entity_id,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
+
+    async def ai_insights(self) -> list[AiInsight]:
+        stats = await self.agency_stats()
+        insights: list[AiInsight] = []
+
+        bajarilish = round(stats.completed_plans / stats.total_plans * 100) if stats.total_plans else 0
+        if bajarilish >= 80:
+            insights.append(AiInsight(
+                type="positive",
+                text=f"Rejalar bajarish darajasi {bajarilish}% — bu a'lo natija! Yoshlar maqsadlarga intilmoqda.",
+            ))
+        elif bajarilish >= 50:
+            insights.append(AiInsight(
+                type="info",
+                text=f"Rejalar bajarish darajasi {bajarilish}%. Yaxshi natija, ammo yaxshilash imkoni bor.",
+            ))
+        else:
+            insights.append(AiInsight(
+                type="warning",
+                text=f"Rejalar bajarish darajasi {bajarilish}% — past ko'rsatkich. Mas'ullar bilan ishlash zarur.",
+            ))
+
+        attend_pct = round(stats.attended_meetings / stats.total_meetings * 100) if stats.total_meetings else 0
+        if attend_pct >= 75:
+            insights.append(AiInsight(
+                type="positive",
+                text=f"Uchrashuvlarga davomat {attend_pct}% — yoshlar faol ishtirok etmoqda.",
+            ))
+        else:
+            insights.append(AiInsight(
+                type="warning",
+                text=f"Uchrashuvlarga davomat {attend_pct}%. Davomat ko'rsatkichini oshirish tavsiya etiladi.",
+            ))
+
+        if stats.active_youth > 0 and stats.total_masullar > 0:
+            ratio = round(stats.active_youth / stats.total_masullar, 1)
+            insights.append(AiInsight(
+                type="info",
+                text=f"Har bir mas'ulga o'rtacha {ratio} nafar faol yosh to'g'ri keladi.",
+            ))
+
+        return insights
