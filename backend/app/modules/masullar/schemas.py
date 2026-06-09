@@ -11,28 +11,39 @@ class MasulBase(CamelModel):
     district_id: str = Field(min_length=1, max_length=64)
     organization_id: UUID | None = None
     phone: str | None = Field(default=None, max_length=32)
+    email: str | None = Field(default=None, max_length=255)
     position: str | None = Field(default=None, max_length=128)
 
 
 class MasulCreate(MasulBase):
+    password: str = Field(min_length=6, max_length=128)
+
     model_config = schema_example(
         {
             "fullName": "Aliyev Bobur Anvarovich",
             "districtId": "Bekobod tumani",
             "organizationId": "3ef0d8f4-2d03-4ca3-93c5-a444a69ea1ff",
             "phone": "+998901234567",
+            "email": "aliyev@example.com",
             "position": "O'qituvchi",
+            "password": "secret123",
         }
     )
 
 
+class MasulPasswordReset(CamelModel):
+    model_config = schema_example({"newPassword": "newSecret123"})
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 class MasulUpdate(CamelModel):
     model_config = schema_example(
-        {"phone": "+998905554433", "position": "Tarbiyaviy ishlar bo'yicha mas'ul"}
+        {"phone": "+998905554433", "email": "aliyev@example.com", "position": "Tarbiyaviy ishlar bo'yicha mas'ul"}
     )
     full_name: str | None = Field(default=None, min_length=2, max_length=255)
     organization_id: UUID | None = None
     phone: str | None = Field(default=None, max_length=32)
+    email: str | None = Field(default=None, max_length=255)
     position: str | None = Field(default=None, max_length=128)
 
 
@@ -53,5 +64,6 @@ class MasulRead(CamelModel):
     district_id: str
     organization_id: UUID | None
     phone: str | None
+    email: str | None
     position: str | None
     created_at: datetime

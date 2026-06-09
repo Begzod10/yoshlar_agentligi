@@ -8,7 +8,7 @@ from app.core.constants import UserRole
 from app.core.deps import CurrentUser, DbSession
 from app.middleware.rbac import require_role
 from app.modules.masullar.repository import MasullarRepository
-from app.modules.masullar.schemas import MasulCreate, MasulRead, MasulUpdate
+from app.modules.masullar.schemas import MasulCreate, MasulPasswordReset, MasulRead, MasulUpdate
 from app.modules.masullar.service import MasullarService
 from app.utils.pagination import Page, PageParams
 
@@ -82,6 +82,19 @@ async def update_masul(
     )
     await session.commit()
     return MasulRead.model_validate(masul)
+
+
+@router.patch("/{masul_id}/password", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_masul_password(
+    masul_id: UUID,
+    payload: MasulPasswordReset,
+    current: Access,
+    session: DbSession,
+    audit: AuditDep,
+) -> None:
+    await _service(session).reset_password(current, masul_id, payload)
+    await audit.record("masul.reset_password", "masul", masul_id)
+    await session.commit()
 
 
 @router.delete("/{masul_id}", status_code=status.HTTP_204_NO_CONTENT)
