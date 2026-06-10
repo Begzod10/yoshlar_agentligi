@@ -69,6 +69,15 @@ class PlanUpdate(CamelModel):
     end_date: date | None = None
 
 
+class PlanProgressUpdate(CamelModel):
+    model_config = schema_example(
+        {"progress": 50, "status": "in_progress", "notes": "2-bosqich bajarildi"}
+    )
+    progress: int | None = Field(default=None, ge=0, le=100)
+    status: PlanStatus | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+
 class PlanRead(CamelModel):
     model_config = schema_example(
         {
@@ -90,11 +99,14 @@ class PlanRead(CamelModel):
     id: UUID
     youth_id: UUID
     masul_id: UUID | None
+    masul_name: str | None = None
     title: str
     goal: str | None
     milestones: list[dict[str, Any]]
     status: PlanStatus
     progress: int
+    notes: str | None
+    attachments: list[dict[str, Any]]
     start_date: date | None
     end_date: date | None
     created_at: datetime

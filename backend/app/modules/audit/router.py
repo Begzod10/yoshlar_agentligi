@@ -1,62 +1,37 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, Depends, Query
 
-from app.core.deps import CurrentUserDep, DbSession
-from app.core.exceptions import ForbiddenError
 from app.core.constants import UserRole
-from app.modules.audit.schemas import AuditLogRead, PiiRevealRequest
-from app.modules.audit.service import list_audit_logs, record_audit
+from app.core.deps import CurrentUser, DbSession
+from app.middleware.rbac import require_role
+from app.modules.audit.repository import AuditRepository
+from app.modules.audit.schemas import AuditLogRead
+from app.utils.pagination import Page, PageParams
 
 router = APIRouter(prefix="/api", tags=["audit"])
 
-PII_ALLOWED_ROLES = frozenset({UserRole.ADMIN, UserRole.DIREKTOR, UserRole.MODERATOR})
+AdminOnly = Annotated[CurrentUser, Depends(require_role(UserRole.ADMIN, UserRole.MODERATOR))]
 
 
-@router.get("/audit-log")
+@router.get("/audit-log", response_model=Page[AuditLogRead])
 async def get_audit_log(
+    _: AdminOnly,
     session: DbSession,
-    user: CurrentUserDep,
-    actor: UUID | None = None,
-    action: str | None = None,
-    entity_type: str | None = None,
-    page: int = Query(1, ge=1),
-    limit: int = Query(50, ge=1, le=100),
-) -> dict:
-    if user.role != UserRole.ADMIN:
-        raise ForbiddenError("admin_only")
-
-    offset = (page - 1) * limit
-    rows, total = await list_audit_logs(
-        session, actor=actor, action=action, entity_type=entity_type,
-        offset=offset, limit=limit,
+    actor: UUID | None = Query(default=None),
+    action: str | None = Query(default=None),
+    entity_type: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> Page[AuditLogRead]:
+    params = PageParams(page=page, limit=limit)
+    repo = AuditRepository(session)
+    items, total = await repo.list(
+        actor=actor, action=action, entity_type=entity_type, params=params
     )
-    return {
-        "data": [AuditLogRead.model_validate(r) for r in rows],
-        "meta": {"total": total, "page": page, "limit": limit},
-    }
-
-
-@router.post("/pii/reveal", status_code=status.HTTP_200_OK)
-async def pii_reveal(
-    body: PiiRevealRequest,
-    session: DbSession,
-    user: CurrentUserDep,
-    request: Request,
-) -> dict[str, str]:
-    if user.role not in PII_ALLOWED_ROLES:
-        raise ForbiddenError("role_not_allowed")
-
-    await record_audit(
-        session,
-        user=user,
-        action="pii.reveal",
-        entity_type=body.entity_type,
-        entity_id=body.entity_id,
-        after={"reason": body.reason},
-        request_id=request.headers.get("X-Request-ID"),
-        ip=request.client.host if request.client else None,
-        user_agent=request.headers.get("User-Agent"),
+    return Page.build(
+        items=[AuditLogRead.model_validate(r) for r in items],
+        total=total,
+        params=params,
     )
-    await session.commit()
-    return {"status": "revealed"}

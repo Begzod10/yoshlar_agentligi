@@ -21,6 +21,7 @@ import {
   ArrowDownRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAiInsights } from "@/lib/api/hooks/use-core-api";
 
 interface InsightItem {
   type: "positive" | "negative" | "warning" | "info";
@@ -112,17 +113,26 @@ export function AIInsights({
   youthData = [],
   className,
 }: AIInsightsProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [insights, setInsights] = useState<InsightItem[]>(() =>
-    generateInsights(districtStats, youthData)
-  );
+  const aiInsights = useAiInsights();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const fallbackInsights = generateInsights(districtStats, youthData);
+  const insights: InsightItem[] =
+    aiInsights.data?.map((insight) => ({
+      type: insight.type,
+      title:
+        insight.type === "positive"
+          ? "Ijobiy ko'rsatkich"
+          : insight.type === "warning"
+            ? "Ogohlantirish"
+            : "AI tavsiyasi",
+      description: insight.text,
+    })) ?? fallbackInsights;
+  const isLoading = aiInsights.isLoading || isRefreshing;
 
   const refreshInsights = async () => {
-    setIsLoading(true);
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setInsights(generateInsights(districtStats, youthData));
-    setIsLoading(false);
+    setIsRefreshing(true);
+    await aiInsights.refetch();
+    setIsRefreshing(false);
   };
 
   const getInsightIcon = (type: string) => {

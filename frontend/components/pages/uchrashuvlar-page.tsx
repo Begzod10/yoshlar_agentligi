@@ -4,6 +4,8 @@ import React from "react"
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { downloadReport } from "@/lib/api/hooks/use-core-api";
+import { ResourcePagination } from "@/components/app/resource-pagination";
 import type { Meeting } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +26,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -78,12 +90,10 @@ export function UchrashuvlarPage() {
   const canAdd = isAdmin || isDirektor || isTashkilotDirektor || isMasul;
   const canEdit = isAdmin || isDirektor || isTashkilotDirektor || isMasul;
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<Meeting | null>(null);
 
   // Get youth for district
   const filteredYouth = youth.filter((y) => {
@@ -91,37 +101,26 @@ export function UchrashuvlarPage() {
     if (isTashkilotDirektor && currentUser?.districtId) {
       return y.districtId === currentUser.districtId;
     }
-    if (selectedDistrict) return y.districtId === selectedDistrict;
+    if (selectedDistrict !== "all") return y.districtId === selectedDistrict;
     return true;
   });
 
-  const youthIds = filteredYouth.map((y) => y.id);
+  const filteredMeetings = meetings;
+  const reportDistrict =
+    isTashkilotDirektor && currentUser?.districtId
+      ? currentUser.districtId
+      : selectedDistrict !== "all"
+        ? selectedDistrict
+        : undefined;
 
-  // Filter meetings based on role and selection
-  let filteredMeetings = meetings.filter((m) => {
-    // Role-based filtering
-    if (isMasul) {
-      if (m.masulId !== currentUser?.id) return false;
-    } else if (isTashkilotDirektor && currentUser?.districtId) {
-      if (!youthIds.includes(m.youthId)) return false;
-    } else if (selectedDistrict) {
-      if (!youthIds.includes(m.youthId)) return false;
-    }
-
-    // Status filter
-    if (statusFilter !== "all" && m.status !== statusFilter) return false;
-
-    // Type filter
-    if (typeFilter !== "all" && m.type !== typeFilter) return false;
-
-    // Search filter
-    const matchesSearch =
-      m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.youthName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.location.toLowerCase().includes(searchQuery.toLowerCase());
-
-    return matchesSearch;
-  });
+  const handleExport = () => {
+    void downloadReport
+      .meetings(reportDistrict)
+      .then(() => showToast("Export yuklab olindi", "success"))
+      .catch((error) =>
+        showToast(error instanceof Error ? error.message : "Export yuklanmadi", "error")
+      );
+  };
 
   // Statistics
   const totalMeetings = filteredMeetings.length;
@@ -225,11 +224,10 @@ export function UchrashuvlarPage() {
     showToast("Uchrashuv holati yangilandi", "success");
   };
 
-  const handleDeleteMeeting = (meeting: Meeting) => {
-    if (confirm(`"${meeting.title}" uchrashuvni o'chirishni tasdiqlaysizmi?`)) {
-      deleteMeeting(meeting.id);
-      showToast("Uchrashuv o'chirildi", "success");
-    }
+  const handleDeleteMeeting = () => {
+    if (!deleteCandidate) return;
+    deleteMeeting(deleteCandidate.id);
+    setDeleteCandidate(null);
   };
 
   return (
@@ -302,39 +300,7 @@ export function UchrashuvlarPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Uchrashuv nomi, yosh yoki manzil bo'yicha qidirish..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full md:w-[160px]">
-                <SelectValue placeholder="Holat" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Barcha holatlar</SelectItem>
-                <SelectItem value="scheduled">Rejalashtirilgan</SelectItem>
-                <SelectItem value="completed">O'tkazildi</SelectItem>
-                <SelectItem value="cancelled">Bekor qilingan</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-full md:w-[160px]">
-                <SelectValue placeholder="Turi" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Barcha turlar</SelectItem>
-                <SelectItem value="individual">Individual</SelectItem>
-                <SelectItem value="group">Guruhiy</SelectItem>
-                <SelectItem value="home_visit">Uy tashrifi</SelectItem>
-                <SelectItem value="online">Online</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleExport}>
               <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
@@ -432,7 +398,7 @@ export function UchrashuvlarPage() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive"
-                                onClick={() => handleDeleteMeeting(meeting)}
+                                onClick={() => setDeleteCandidate(meeting)}
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 O'chirish
@@ -447,6 +413,7 @@ export function UchrashuvlarPage() {
               )}
             </TableBody>
           </Table>
+          <ResourcePagination resource="meetings" />
         </CardContent>
       </Card>
 
@@ -469,38 +436,40 @@ export function UchrashuvlarPage() {
                 <Label htmlFor="description">Tavsif</Label>
                 <Textarea id="description" name="description" placeholder="Uchrashuv haqida qisqacha ma'lumot" />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="youthId">Yosh</Label>
-                <Select name="youthId" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Yoshni tanlang" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredYouth.filter(y => y.status === "active").map((y) => (
-                      <SelectItem key={y.id} value={y.id}>
-                        {y.fullName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {!isMasul && (
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="masulId">Mas'ul hodim</Label>
-                  <Select name="masulId" required>
+                  <Label htmlFor="youthId">Yosh</Label>
+                  <Select name="youthId" required>
                     <SelectTrigger>
-                      <SelectValue placeholder="Mas'ulni tanlang" />
+                      <SelectValue placeholder="Yoshni tanlang" />
                     </SelectTrigger>
                     <SelectContent>
-                      {masullar.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.fullName}
+                      {filteredYouth.filter((y) => y.id && y.status === "active").map((y) => (
+                        <SelectItem key={y.id} value={y.id}>
+                          {y.fullName}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
+                {!isMasul && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="masulId">Mas'ul hodim</Label>
+                    <Select name="masulId" required>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Mas'ulni tanlang" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {masullar.filter((m) => m.id).map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.fullName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="date">Sana</Label>
@@ -595,6 +564,34 @@ export function UchrashuvlarPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(deleteCandidate)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteCandidate(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Uchrashuvni o'chirish</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteCandidate
+                ? `"${deleteCandidate.title}" uchrashuvini o'chirishni tasdiqlaysizmi?`
+                : ""}
+              Bu amalni ortga qaytarib bo'lmaydi.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Bekor qilish</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteMeeting}
+            >
+              O'chirish
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

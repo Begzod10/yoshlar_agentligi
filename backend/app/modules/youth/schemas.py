@@ -13,6 +13,7 @@ class YouthBase(CamelModel):
     district_id: str = Field(min_length=1, max_length=64)
     masul_id: UUID | None = None
     organization_id: UUID | None = None
+    category: str | None = Field(default=None, max_length=128)
     contact: str | None = Field(default=None, max_length=64)
     date_of_birth: date | None = None
     address: str | None = Field(default=None, max_length=255)
@@ -45,6 +46,7 @@ class YouthUpdate(CamelModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=255)
     masul_id: UUID | None = None
     organization_id: UUID | None = None
+    category: str | None = Field(default=None, max_length=128)
     contact: str | None = Field(default=None, max_length=64)
     date_of_birth: date | None = None
     address: str | None = Field(default=None, max_length=255)
@@ -94,8 +96,10 @@ class YouthRead(CamelModel):
     full_name: str
     district_id: str
     masul_id: UUID | None
+    masul_name: str | None = None
     organization_id: UUID | None
     status: YouthStatus
+    category: str | None
     contact: str | None
     date_of_birth: date | None
     address: str | None

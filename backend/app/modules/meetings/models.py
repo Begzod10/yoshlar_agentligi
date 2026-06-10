@@ -4,7 +4,8 @@ from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.constants import MeetingAttendance
 from app.db.base import Base, TimestampMixin, new_uuid
@@ -40,3 +41,13 @@ class Meeting(Base, TimestampMixin):
         JSONB, nullable=False, default=list
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    masul: Mapped["Masul | None"] = relationship(  # type: ignore[name-defined]
+        "Masul", foreign_keys=[masul_id], lazy="raise"
+    )
+
+    @property
+    def masul_name(self) -> str | None:
+        if "masul" in sa_inspect(self).unloaded:
+            return None
+        return self.masul.full_name if self.masul is not None else None

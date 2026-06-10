@@ -2,6 +2,7 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.constants import CROSS_DISTRICT_ROLES, UserRole
 from app.core.deps import CurrentUser
@@ -14,7 +15,11 @@ class YouthRepository:
         self._session = session
 
     async def get_by_id(self, youth_id: UUID) -> Youth | None:
-        stmt = select(Youth).where(Youth.id == youth_id, Youth.deleted_at.is_(None))
+        stmt = (
+            select(Youth)
+            .options(selectinload(Youth.masul))
+            .where(Youth.id == youth_id, Youth.deleted_at.is_(None))
+        )
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def add(self, youth: Youth) -> Youth:
@@ -32,7 +37,7 @@ class YouthRepository:
         search: str | None = None,
         params: PageParams,
     ) -> tuple[list[Youth], int]:
-        base = select(Youth).where(Youth.deleted_at.is_(None))
+        base = select(Youth).options(selectinload(Youth.masul)).where(Youth.deleted_at.is_(None))
 
         if actor.role in CROSS_DISTRICT_ROLES:
             if district_id is not None:
@@ -47,7 +52,7 @@ class YouthRepository:
             # masul_hodim sees only youth where they are the assigned masul,
             # joined via the user's own caseworker record. The link is
             # users.id <-> masullar.id (1-1 by seed) in v1.
-            base = base.where(Youth.masul_id == actor.id)
+            base = base.where(Youth.masul_id == actor.masul_id)
 
         if status is not None:
             base = base.where(Youth.status == status)

@@ -36,7 +36,7 @@ class YouthService:
                 raise DistrictMismatchError()
             return
         if actor.role == UserRole.MASUL_HODIM:
-            if youth.masul_id != actor.id:
+            if youth.masul_id != actor.masul_id:
                 raise YouthNotAssignedError()
             return
         raise ForbiddenError("role_not_allowed")
@@ -64,6 +64,7 @@ class YouthService:
             masul_id=payload.masul_id,
             organization_id=payload.organization_id,
             status=YouthStatus.ACTIVE,
+            category=payload.category,
             contact=payload.contact,
             date_of_birth=payload.date_of_birth,
             address=payload.address,
@@ -125,7 +126,8 @@ class YouthService:
     async def _validate_masul_assignment(
         self, masul_id: UUID, youth_district: str
     ) -> None:
-        assert self._masullar is not None
+        if self._masullar is None:
+            raise RuntimeError("masullar repository required for masul assignment")
         masul = await self._masullar.get_by_id(masul_id)
         if masul is None:
             raise ValidationError("masul_not_found")

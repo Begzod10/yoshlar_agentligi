@@ -2,6 +2,7 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.constants import CROSS_DISTRICT_ROLES, UserRole
 from app.core.deps import CurrentUser
@@ -15,7 +16,11 @@ class PlansRepository:
         self._session = session
 
     async def get_by_id(self, plan_id: UUID) -> Plan | None:
-        stmt = select(Plan).where(Plan.id == plan_id, Plan.deleted_at.is_(None))
+        stmt = (
+            select(Plan)
+            .options(selectinload(Plan.masul))
+            .where(Plan.id == plan_id, Plan.deleted_at.is_(None))
+        )
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def add(self, plan: Plan) -> Plan:
@@ -33,6 +38,7 @@ class PlansRepository:
     ) -> tuple[list[Plan], int]:
         base = (
             select(Plan)
+            .options(selectinload(Plan.masul))
             .join(Youth, Youth.id == Plan.youth_id)
             .where(Plan.deleted_at.is_(None), Youth.deleted_at.is_(None))
         )
@@ -41,7 +47,7 @@ class PlansRepository:
         elif actor.role == UserRole.TASHKILOT_DIREKTORI:
             base = base.where(Youth.district_id == actor.district_id)
         elif actor.role == UserRole.MASUL_HODIM:
-            base = base.where(Youth.masul_id == actor.id)
+            base = base.where(Youth.masul_id == actor.masul_id)
 
         if youth_id is not None:
             base = base.where(Plan.youth_id == youth_id)

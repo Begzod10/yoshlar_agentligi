@@ -77,10 +77,12 @@ class AuthService:
     def build_token_response(self, user: User, sid: UUID | None = None) -> TokenResponse:
         return TokenResponse(
             access_token=create_access_token(
-                sub=user.id, role=user.role, district_id=user.district_id, sid=sid
+                sub=user.id, role=user.role, district_id=user.district_id, sid=sid,
+                masul_id=user.masul_id,
             ),
             refresh_token=create_refresh_token(
-                sub=user.id, role=user.role, district_id=user.district_id, sid=sid
+                sub=user.id, role=user.role, district_id=user.district_id, sid=sid,
+                masul_id=user.masul_id,
             ),
             user=UserRead.model_validate(user),
         )

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     backups_dir: str = "/home/rimefara/projects/yoshlar_agentligi/backups"
+    media_dir: str = "/home/rimefara/projects/yoshlar_agentligi/backend/media"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
