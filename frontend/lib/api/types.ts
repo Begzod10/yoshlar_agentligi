@@ -312,6 +312,7 @@ export interface MonitoringDistrict {
   totalMeetings: number;
   bajarilishPct: number;
   aiBall: number;
+  aiComment?: string | null;
   umumiyBall: number;
 }
 
@@ -325,6 +326,7 @@ export interface MonitoringOrganization {
   totalPlans: number;
   bajarilishPct: number;
   aiBall: number;
+  aiComment?: string | null;
 }
 
 export interface MonitoringMasul {
@@ -338,6 +340,7 @@ export interface MonitoringMasul {
   totalMeetings: number;
   bajarilishPct: number;
   aiBall: number;
+  aiComment?: string | null;
 }
 
 export interface CategoryStats {
@@ -357,6 +360,7 @@ export interface TopYouthStats {
   totalMeetings: number;
   attendedMeetings: number;
   aiScore: number;
+  aiComment?: string | null;
 }
 
 export interface RecentActivity {

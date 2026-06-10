@@ -11,7 +11,7 @@ from app.core.exceptions import (
 )
 from app.modules.plans.models import Plan
 from app.modules.plans.repository import PlansRepository
-from app.modules.plans.schemas import PlanCreate, PlanUpdate
+from app.modules.plans.schemas import PlanCreate, PlanProgressUpdate, PlanUpdate
 from app.modules.youth.models import Youth
 from app.modules.youth.repository import YouthRepository
 
@@ -46,7 +46,7 @@ class PlansService:
             masul_id=youth.masul_id,
             title=payload.title,
             goal=payload.goal,
-            milestones=[m.model_dump() for m in payload.milestones],
+            milestones=[m.model_dump(mode="json") for m in payload.milestones],
             status=PlanStatus.DRAFT,
             progress=0,
             start_date=payload.start_date,
@@ -74,6 +74,24 @@ class PlansService:
             data["milestones"] = [m.model_dump(mode="json") for m in payload.milestones]
         for key, value in data.items():
             setattr(plan, key, value)
+        return plan
+
+    async def update_progress(
+        self,
+        actor: CurrentUser,
+        plan_id: UUID,
+        payload: PlanProgressUpdate,
+        attachment: dict | None = None,
+    ) -> Plan:
+        plan = await self.get(actor, plan_id)
+        if payload.progress is not None:
+            plan.progress = payload.progress
+        if payload.status is not None:
+            plan.status = payload.status
+        if payload.notes is not None:
+            plan.notes = payload.notes
+        if attachment is not None:
+            plan.attachments = list(plan.attachments or []) + [attachment]
         return plan
 
     async def soft_delete(self, actor: CurrentUser, plan_id: UUID) -> None:

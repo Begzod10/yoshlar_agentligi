@@ -18,7 +18,13 @@ from app.utils.pagination import Page, PageParams
 
 router = APIRouter(prefix="/api/organizations", tags=["organizations"])
 
-_READ_ROLES = (UserRole.ADMIN, UserRole.DIREKTOR, UserRole.MODERATOR)
+_READ_ROLES = (
+    UserRole.ADMIN,
+    UserRole.DIREKTOR,
+    UserRole.MODERATOR,
+    UserRole.TASHKILOT_DIREKTORI,
+    UserRole.MASUL_HODIM,
+)
 _WRITE_ROLES = (UserRole.ADMIN, UserRole.DIREKTOR)
 
 ReadAccess = Annotated[CurrentUser, Depends(require_role(*_READ_ROLES))]
@@ -36,7 +42,7 @@ async def list_organizations(
     district_id: str | None = Query(default=None),
     search: str | None = Query(default=None, min_length=1, max_length=255),
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=20, ge=1, le=200),
+    limit: int = Query(default=20, ge=1, le=1000),
 ) -> Page[OrganizationRead]:
     params = PageParams(page=page, limit=limit)
     items, total = await OrganizationsRepository(session).list(
