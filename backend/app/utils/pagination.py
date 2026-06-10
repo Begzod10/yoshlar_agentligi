@@ -8,7 +8,7 @@ T = TypeVar("T")
 
 class PageParams(CamelModel):
     page: int = Field(default=1, ge=1)
-    limit: int = Field(default=20, ge=1, le=200)
+    limit: int = Field(default=20, ge=1, le=1000)
 
     @property
     def offset(self) -> int:
