@@ -10,7 +10,7 @@ from app.core.constants import UserRole
 from app.core.logging import configure_logging, get_logger
 from app.core.security import hash_password
 from app.db.session import async_session_maker
-from app.modules.masullar import models as _masullar_models  # noqa: F401
+from app.modules.masullar.models import Masul  # noqa: F401 — registers masullar table for FK resolution
 from app.modules.users.models import User
 from app.modules.users.repository import UsersRepository
 
