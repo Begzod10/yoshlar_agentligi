@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/app-context";
+import { useAgencyStats, usePlans } from "@/lib/api/hooks/use-core-api";
 import { APP_PAGE_HREFS, type AppPageId } from "@/lib/navigation";
 import type { UserRole } from "@/lib/types";
 import {
@@ -44,11 +45,18 @@ export function Sidebar({
 }: {
   currentPage: string;
 }) {
-  const { currentUser, sidebarOpen, setSidebarOpen, getVisibleYouth, getVisiblePlans, getVisibleMeetings } = useApp();
+  const { currentUser, sidebarOpen, setSidebarOpen } = useApp();
 
-  const visibleYouth = getVisibleYouth();
-  const visiblePlans = getVisiblePlans();
-  const visibleMeetings = getVisibleMeetings();
+  // Real API counts for badges
+  const { data: stats } = useAgencyStats();
+  const { data: inProgressPlans } = usePlans({ status: "in_progress", page: 1, limit: 1 });
+
+  const activeYouthCount   = stats?.activeYouth ?? 0;
+  const inProgressPlanCount = inProgressPlans?.total ?? 0;
+  // "scheduled" meetings ≈ totalMeetings - attendedMeetings
+  const scheduledMeetingCount = stats
+    ? Math.max(0, (stats.totalMeetings ?? 0) - (stats.attendedMeetings ?? 0))
+    : 0;
 
   const navItems: NavItem[] = [
     {
@@ -62,7 +70,7 @@ export function Sidebar({
       id: "yoshlar",
       icon: Users,
       roles: ["admin", "direktor", "tashkilot_direktori", "masul_hodim"],
-      getBadge: () => visibleYouth.filter((y) => y.status === "active").length || undefined,
+      getBadge: () => activeYouthCount || undefined,
     },
     {
       title: "Tashkilotlar",
@@ -81,14 +89,14 @@ export function Sidebar({
       id: "rejalar",
       icon: FileText,
       roles: ["admin", "direktor", "tashkilot_direktori", "masul_hodim"],
-      getBadge: () => visiblePlans.filter((p) => p.status === "in_progress").length || undefined,
+      getBadge: () => inProgressPlanCount || undefined,
     },
     {
       title: "Uchrashuvlar",
       id: "uchrashuvlar",
       icon: Calendar,
       roles: ["admin", "direktor", "tashkilot_direktori", "masul_hodim"],
-      getBadge: () => visibleMeetings.filter((m) => m.status === "scheduled").length || undefined,
+      getBadge: () => scheduledMeetingCount || undefined,
     },
     {
       title: "Monitoring",
