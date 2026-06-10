@@ -1,4 +1,10 @@
+from datetime import datetime
+from uuid import UUID
+
 from pydantic import BaseModel
+
+from app.core.base_schema import CamelModel
+from app.core.constants import YouthStatus
 
 
 class AgencyStats(BaseModel):
@@ -41,3 +47,37 @@ class CompareResult(BaseModel):
 class TrendPoint(BaseModel):
     period: str
     value: int
+
+
+class CategoryStat(CamelModel):
+    category: str
+    total_youth: int
+
+
+class TopYoshRow(CamelModel):
+    id: UUID
+    full_name: str
+    district_id: str
+    organization_id: UUID | None
+    masul_id: UUID | None
+    status: YouthStatus
+    total_plans: int
+    completed_plans: int
+    total_meetings: int
+    attended_meetings: int
+    ai_score: float
+
+
+class RecentActivityRow(CamelModel):
+    id: UUID
+    user_id: UUID
+    role: str
+    action: str
+    entity_type: str
+    entity_id: UUID | None
+    created_at: datetime
+
+
+class AiInsight(CamelModel):
+    type: str
+    text: str

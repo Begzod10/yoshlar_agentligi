@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: yoshlar-postgres
+    restart: always
     environment:
       POSTGRES_USER: yoshlar
       POSTGRES_PASSWORD: yoshlar
@@ -36,6 +37,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: yoshlar-redis
+    restart: always
     ports:
       - "6479:6379"
     volumes:
@@ -63,7 +65,7 @@ services:
       - JWT_ALGORITHM=HS256
       - JWT_ACCESS_TTL_MIN=30
       - JWT_REFRESH_TTL_DAYS=14
-      - CORS_ORIGINS=https://agency.gennis.uz
+      - CORS_ORIGINS=https://agency.gennis.uz,http://localhost:3000,http://localhost:3001
       - LOG_LEVEL=INFO
     ports:
       - "8001:8000"

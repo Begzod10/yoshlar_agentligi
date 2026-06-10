@@ -133,7 +133,10 @@ export function Sidebar({
       <aside
         className={cn(
           "fixed left-0 top-0 z-40 h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-300",
-          sidebarOpen ? "w-64" : "w-16"
+          // width
+          sidebarOpen ? "w-64" : "w-64 lg:w-16",
+          // mobile: hidden off-screen when closed, visible as overlay when open
+          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
         {/* Logo */}
@@ -201,6 +204,9 @@ export function Sidebar({
                 <Link
                   key={item.id}
                   href={APP_PAGE_HREFS[item.id]}
+                  onClick={() => {
+                    if (window.innerWidth < 1024) setSidebarOpen(false);
+                  }}
                   className={cn(
                     "w-full flex items-center gap-3 h-10 px-3 rounded-md transition-colors text-sm",
                     isActive

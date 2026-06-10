@@ -52,7 +52,8 @@ export function Topbar({ onLogout }: TopbarProps) {
     <header
       className={cn(
         "fixed top-0 right-0 z-30 h-16 bg-card border-b border-border transition-all duration-300",
-        sidebarOpen ? "left-64" : "left-16"
+        "left-0",
+        sidebarOpen ? "lg:left-64" : "lg:left-16"
       )}
     >
       <div className="flex h-full items-center justify-between px-4 gap-4">
@@ -61,7 +62,6 @@ export function Topbar({ onLogout }: TopbarProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden"
             onClick={() => setSidebarOpen(!sidebarOpen)}
           >
             <Menu className="h-5 w-5" />

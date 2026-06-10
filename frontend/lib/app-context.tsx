@@ -292,7 +292,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedYouthCategory, setSelectedYouthCategory] = useState<YouthCategoryType>(null);
 
   // UI State
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 1024 : true
+  );
   const [currentPage, setCurrentPageState] = useState(() => pathnameToPage(pathname));
   const [selectedDistrict, setSelectedDistrict] = useState<
     ToshkentDistrict | "all"
