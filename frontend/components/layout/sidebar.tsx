@@ -51,12 +51,14 @@ export function Sidebar({
   const { data: stats } = useAgencyStats();
   const { data: inProgressPlans } = usePlans({ status: "in_progress", page: 1, limit: 1 });
 
-  const activeYouthCount   = stats?.activeYouth ?? 0;
-  const inProgressPlanCount = inProgressPlans?.total ?? 0;
-  // "scheduled" meetings ≈ totalMeetings - attendedMeetings
+  const activeYouthCount      = stats?.activeYouth        ?? 0;
+  const orgCount              = stats?.totalOrganizations  ?? 0;
+  const masulCount            = stats?.totalMasullar       ?? 0;
+  const inProgressPlanCount   = inProgressPlans?.total     ?? 0;
   const scheduledMeetingCount = stats
     ? Math.max(0, (stats.totalMeetings ?? 0) - (stats.attendedMeetings ?? 0))
     : 0;
+  const graduatedCount        = stats?.graduatedYouth      ?? 0;
 
   const navItems: NavItem[] = [
     {
@@ -77,12 +79,14 @@ export function Sidebar({
       id: "tashkilotlar",
       icon: Building2,
       roles: ["admin", "direktor", "moderator"],
+      getBadge: () => orgCount || undefined,
     },
     {
       title: "Mas'ullar",
       id: "masullar",
       icon: UserCheck,
       roles: ["admin", "direktor", "tashkilot_direktori"],
+      getBadge: () => masulCount || undefined,
     },
     {
       title: "Individual rejalar",
@@ -109,6 +113,7 @@ export function Sidebar({
       id: "chiqarilgan",
       icon: UserMinus,
       roles: ["admin", "direktor", "tashkilot_direktori"],
+      getBadge: () => graduatedCount || undefined,
     },
     {
       title: "Foydalanuvchilar",

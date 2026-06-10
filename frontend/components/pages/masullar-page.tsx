@@ -62,6 +62,7 @@ import {
   Mail,
 } from "lucide-react";
 import { useDistricts } from "@/lib/api/hooks/use-districts";
+import { AddMasulUserDialog } from "@/components/masullar/add-masul-user-dialog";
 
 export function MasullarPage() {
   const {
@@ -328,10 +329,10 @@ export function MasullarPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline">
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </Button>
+            {/*<Button variant="outline">*/}
+            {/*  <Download className="mr-2 h-4 w-4" />*/}
+            {/*  Export*/}
+            {/*</Button>*/}
           </div>
         </CardContent>
       </Card>
@@ -442,8 +443,16 @@ export function MasullarPage() {
         </CardContent>
       </Card>
 
-      {/* Add Masul Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={handleAddDialogOpenChange}>
+      {/* Add Masul Dialog — direktor: admin-style user creation modal */}
+      {isDirektor ? (
+        <AddMasulUserDialog
+          open={isAddDialogOpen}
+          onOpenChange={handleAddDialogOpenChange}
+        />
+      ) : null}
+
+      {/* Add Masul Dialog — admin / tashkilot_direktori: classic masul form */}
+      {!isDirektor && <Dialog open={isAddDialogOpen} onOpenChange={handleAddDialogOpenChange}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Yangi mas'ul hodim qo'shish</DialogTitle>
@@ -528,7 +537,7 @@ export function MasullarPage() {
             </DialogFooter>
           </form>
         </DialogContent>
-      </Dialog>
+      </Dialog>}
 
       {/* View Masul Dialog */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
