@@ -216,7 +216,9 @@ class MonitoringService:
 
         results = []
         for r in rows_data:
-            ai_ball = ai_scores.get(r["district_id"], r["_formula_ball"])
+            ai_result = ai_scores.get(r["district_id"])
+            ai_ball = ai_result[0] if ai_result else r["_formula_ball"]
+            ai_comment = ai_result[1] if ai_result else None
             results.append({
                 "district_id": r["district_id"],
                 "total_youth": r["total_youth"],
@@ -225,6 +227,7 @@ class MonitoringService:
                 "total_meetings": r["total_meetings"],
                 "bajarilish_pct": r["bajarilish_pct"],
                 "ai_ball": ai_ball,
+                "ai_comment": ai_comment,
                 "umumiy_ball": _umumiy_ball(r["total_youth"], r["total_masullar"], r["bajarilish_pct"], ai_ball),
             })
 
@@ -339,7 +342,9 @@ class MonitoringService:
 
         results = []
         for r in rows_data:
-            ai_ball = ai_scores.get(str(r["id"]), r["_formula_ball"])
+            ai_result = ai_scores.get(str(r["id"]))
+            ai_ball = ai_result[0] if ai_result else r["_formula_ball"]
+            ai_comment = ai_result[1] if ai_result else None
             results.append({
                 "id": r["id"],
                 "name": r["name"],
@@ -349,6 +354,7 @@ class MonitoringService:
                 "total_plans": r["total_plans"],
                 "bajarilish_pct": r["bajarilish_pct"],
                 "ai_ball": ai_ball,
+                "ai_comment": ai_comment,
             })
 
         results.sort(key=lambda r: (r["ai_ball"], r["total_youth"]), reverse=True)
@@ -480,7 +486,9 @@ class MonitoringService:
 
         results = []
         for r in rows_data:
-            ai_ball = ai_scores.get(str(r["id"]), r["_formula_ball"])
+            ai_result = ai_scores.get(str(r["id"]))
+            ai_ball = ai_result[0] if ai_result else r["_formula_ball"]
+            ai_comment = ai_result[1] if ai_result else None
             results.append({
                 "id": r["id"],
                 "full_name": r["full_name"],
@@ -491,6 +499,7 @@ class MonitoringService:
                 "total_meetings": r["total_meetings"],
                 "bajarilish_pct": r["bajarilish_pct"],
                 "ai_ball": ai_ball,
+                "ai_comment": ai_comment,
             })
 
         results.sort(key=lambda r: (r["ai_ball"], r["total_youth"]), reverse=True)

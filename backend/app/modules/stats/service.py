@@ -278,7 +278,9 @@ class StatsService:
         results = []
         for r in raw_rows:
             y = r["youth"]
-            ai_score = ai_scores.get(str(y.id), r["formula_score"])
+            ai_result = ai_scores.get(str(y.id))
+            ai_score = ai_result[0] if ai_result else r["formula_score"]
+            ai_comment = ai_result[1] if ai_result else None
             results.append(TopYoshRow(
                 id=y.id,
                 full_name=y.full_name,
@@ -291,6 +293,7 @@ class StatsService:
                 total_meetings=r["tm"],
                 attended_meetings=r["am"],
                 ai_score=ai_score,
+                ai_comment=ai_comment,
             ))
 
         results.sort(key=lambda x: x.ai_score, reverse=True)

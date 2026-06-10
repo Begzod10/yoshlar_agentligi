@@ -10,44 +10,53 @@ from app.modules.stats.schemas import AgencyStats, AiInsight
 logger = logging.getLogger(__name__)
 
 _INSIGHTS_SYSTEM = """\
-Sen O'zbekiston yoshlar agentligi uchun tahlil qiluvchi AI yordamchisisan.
-Yoshlar agentligi — yosh fuqarolarning rivojlanishini kuzatib boradigan davlat tashkiloti.
-Mas'ullar yoshlar bilan ishlaydi, rejalar tuzadi va uchrashuvlar o'tkazadi.
+Sen O'zbekiston yoshlar agentligi uchun yuqori malakali tahlilchi AI yordamchisisan.
+Yoshlar agentligi — yosh fuqarolarning kasbiy va shaxsiy rivojlanishini kuzatib boruvchi davlat tashkiloti.
+Mas'ullar yoshlar bilan individual ishlaydi: rejalar tuzadi, uchrashuvlar o'tkazadi, natijalarni kuzatadi.
 
-Senga berilgan statistik ma'lumotlar asosida 4-6 ta foydali tavsiya va xulosalar ber.
+Vazifang: berilgan statistik ma'lumotlar asosida 5-6 ta CHUQUR va AMALIY tavsiya ber.
 
-Har bir tavsiya quyidagi JSON formatda bo'lsin:
-{"type": "positive"|"warning"|"info"|"critical", "text": "O'zbek tilida aniq va amaliy tavsiya"}
+Har bir tavsiya quyidagi JSON formatda:
+{"type": "positive"|"warning"|"info"|"critical", "text": "..."}
 
 Turlar:
-- "positive": yaxshi natijalar (80%+ bajarilish, yuqori davomat)
-- "warning": e'tibor talab qiladigan holat (50-79%)
-- "critical": jiddiy muammo (50% dan past ko'rsatkich)
-- "info": foydali ma'lumot yoki tavsiya
+- "positive": kuchli natija (80%+) — nimani to'g'ri qilayotganini aniqla va davom ettirish yo'lini ko'rsat
+- "warning": o'rta natija (50-79%) — aniq sabab va tuzatish chorasi bilan
+- "critical": jiddiy muammo (50% dan past) — zudlik bilan qanday harakat kerakligini ko'rsat
+- "info": strategik tavsiya yoki muhim kuzatish
 
-Qoidalar:
-- Faqat raqamlarni takrorlamang — aniq, amaliy tavsiya bering
-- Har bir matn 1-2 jumladan iborat bo'lsin
-- Faqat JSON massiv qaytaring, boshqa matn yo'q
+Majburiy qoidalar:
+- Har bir tavsiya BOSHQALARIDAN FARQLI bo'lsin (bir xil fikrni takrorlama)
+- Raqamlarni faqat kontekst uchun ishlatib, ASOSAN amaliy harakat tavsiya qil
+- "Mas'ullar bilan ishlash kerak" kabi umumiy gaplardan QOCHING — kimga, nima qilish kerakligini ayting
+- Har bir matn 1-2 ta aniq jumladan iborat
+- Faqat JSON massiv qaytaring, boshqa hech narsa yo'q
 """
 
 _SCORING_SYSTEM = """\
-Sen O'zbekiston yoshlar agentligi uchun reyting hisoblash AI yordamchisisang.
-Senga bir nechta {entity_type} ma'lumotlari beriladi. Har birini 0-100 ball bilan baholab ber.
+Sen O'zbekiston yoshlar agentligi uchun yuqori malakali reyting tahlilchisi AI yordamchisisang.
+Senga bir nechta {entity_type} ma'lumotlari beriladi. Har birini 0-100 ball bilan baholab, O'zbek tilida AMALIY izoh yoz.
 
 Baholash mezonlari:
-- Rejalar bajarilishi (plan_pct): asosiy mezon, og'irligi 55%
-- Uchrashuvlar davomati (meet_pct): ikkinchi mezon, og'irligi 35%
-- Nisbiy samaradorlik (guruh ichida taqqoslash): 10%
+- Rejalar bajarilishi (plan_pct): og'irligi 55% — maqsadlarga erishish darajasi
+- Uchrashuvlar davomati (meet_pct): og'irligi 35% — faollik va ishtirokchilik
+- Guruh ichida nisbiy samaradorlik: 10% — boshqalar bilan solishtirganda holat
 
-Qoidalar:
-- Guruh ichida nisbiy baholash: eng yaxshisi 88-98 ball, eng yomoni 8-22 ball
-- O'rta ko'rsatkich: 45-65 ball atrofida
-- Barcha ko'rsatkichlar 0 bo'lsa ham minimal ball ber (8-15)
-- Ball 0.1 aniqlikda bo'lsin
+Ball diapazoni (MAJBURIY):
+- Guruhning eng yaxshisi: 88-98
+- Yuqori ko'rsatkich (75%+): 72-87
+- O'rta ko'rsatkich (50-74%): 42-71
+- Past ko'rsatkich (25-49%): 22-41
+- Juda past (25% dan kam): 8-21
 
-Faqat JSON massiv qaytargin, boshqa matn yo'q:
-[{{"id": "...", "score": 72.5}}, ...]
+"comment" qoidalari:
+- 1-2 aniq jumla, FAQAT shu entity haqida
+- Kuchli tomonni VA zaif tomonni mention qil
+- Konkret: "rejalar 80% bajarilgan, ammo davomat 40% past — uchrashuvlarni muntazam o'tkazish zarur"
+- Umumiy ("yaxshi ishlayapti") gaplardan QOCHING
+
+Faqat JSON massiv qaytargin, boshqa hech narsa yo'q:
+[{{"id": "...", "score": 72.5, "comment": "..."}}, ...]
 """
 
 
@@ -108,8 +117,9 @@ class AiService:
         self,
         entity_type: str,
         entities: list[dict[str, Any]],
-    ) -> dict[str, float]:
-        """Score a list of entities 0-100. Returns {str(id): score}. Empty dict on failure."""
+    ) -> dict[str, tuple[float, str]]:
+        """Score a list of entities 0-100 with a comment.
+        Returns {str(id): (score, comment)}. Empty dict on failure."""
         if self._client is None or not entities:
             return {}
 
@@ -124,13 +134,13 @@ class AiService:
                     {"role": "user", "content": data},
                 ],
                 temperature=0.2,
-                max_tokens=1200,
-                timeout=20.0,
+                max_tokens=1600,
+                timeout=25.0,
             )
             content = response.choices[0].message.content or "[]"
             raw: list[dict[str, Any]] = json.loads(content)
             return {
-                str(item["id"]): round(float(item["score"]), 1)
+                str(item["id"]): (round(float(item["score"]), 1), str(item.get("comment", "")))
                 for item in raw
                 if isinstance(item, dict) and "id" in item and "score" in item
             }

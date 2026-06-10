@@ -25,6 +25,7 @@ class DistrictRatingRow(CamelModel):
     total_meetings: int
     bajarilish_pct: float
     ai_ball: float
+    ai_comment: str | None = None
     umumiy_ball: float
 
 
@@ -51,6 +52,7 @@ class OrgRatingRow(CamelModel):
     total_plans: int
     bajarilish_pct: float
     ai_ball: float
+    ai_comment: str | None = None
 
 
 class MasulRatingRow(CamelModel):
@@ -78,6 +80,7 @@ class MasulRatingRow(CamelModel):
     total_meetings: int
     bajarilish_pct: float
     ai_ball: float
+    ai_comment: str | None = None
 
 
 class MonitoringOverview(CamelModel):
