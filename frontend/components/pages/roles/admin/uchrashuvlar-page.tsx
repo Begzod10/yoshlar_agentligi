@@ -876,7 +876,7 @@ export function AdminUchrashuvlarPage() {
                       <div className="space-y-2">
                         {selectedMeeting.attachments.map((att, i) => {
                           const url = `${config.apiUrl}${att.path}`;
-                          const isImg = att.content_type.startsWith("image/");
+                          const isImg = att.content_type?.startsWith("image/") ?? false;
                           return isImg ? (
                             <div key={i} className="relative group rounded-lg overflow-hidden border bg-muted/30">
                               <img src={url} alt={att.filename} className="w-full max-h-48 object-contain" />

@@ -67,7 +67,7 @@ import {
 } from "lucide-react";
 
 function isImage(att: MeetingAttachment) {
-  return att.content_type.startsWith("image/");
+  return att.content_type?.startsWith("image/") ?? false;
 }
 
 function attachmentUrl(att: MeetingAttachment) {
