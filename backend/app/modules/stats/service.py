@@ -247,13 +247,38 @@ class StatsService:
         )
         rows = (await self._session.execute(stmt)).all()
 
-        results = []
+        # Build rows with formula fallback scores
+        raw_rows = []
         for r in rows:
             y = r[0]
             tp, cp, tm, am = r[1], r[2], r[3], r[4]
             plan_score = (cp / tp * 60) if tp else 0
             meet_score = (am / tm * 40) if tm else 0
-            ai_score = round((plan_score + meet_score) * 100) / 100
+            formula_score = round((plan_score + meet_score) * 100) / 100
+            raw_rows.append({
+                "youth": y,
+                "tp": tp, "cp": cp, "tm": tm, "am": am,
+                "formula_score": formula_score,
+            })
+
+        # AI scoring
+        from app.modules.ai.service import AiService
+        ai_input = [
+            {
+                "id": str(r["youth"].id),
+                "name": r["youth"].full_name,
+                "plan_pct": round(r["cp"] / r["tp"] * 100, 1) if r["tp"] else 0,
+                "meet_pct": round(r["am"] / r["tm"] * 100, 1) if r["tm"] else 0,
+                "district": r["youth"].district_id,
+            }
+            for r in raw_rows
+        ]
+        ai_scores = await AiService().score_entities("yosh (youth)", ai_input)
+
+        results = []
+        for r in raw_rows:
+            y = r["youth"]
+            ai_score = ai_scores.get(str(y.id), r["formula_score"])
             results.append(TopYoshRow(
                 id=y.id,
                 full_name=y.full_name,
@@ -261,10 +286,10 @@ class StatsService:
                 organization_id=y.organization_id,
                 masul_id=y.masul_id,
                 status=y.status,
-                total_plans=tp,
-                completed_plans=cp,
-                total_meetings=tm,
-                attended_meetings=am,
+                total_plans=r["tp"],
+                completed_plans=r["cp"],
+                total_meetings=r["tm"],
+                attended_meetings=r["am"],
                 ai_score=ai_score,
             ))
 

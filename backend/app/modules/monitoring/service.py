@@ -173,7 +173,8 @@ class MonitoringService:
 
         all_districts = set(youth_by_district) | set(masullar_by_district)
 
-        results = []
+        # Build raw rows with formula fallback scores
+        rows_data = []
         for district_id in all_districts:
             youth_cnt = youth_by_district.get(district_id, 0)
             masul_cnt = masullar_by_district.get(district_id, 0)
@@ -185,20 +186,47 @@ class MonitoringService:
             bajarilish = round(completed_cnt / plan_cnt * 100, 1) if plan_cnt else 0.0
             plan_pct = completed_cnt / plan_cnt if plan_cnt else 0.0
             meet_pct = attended_cnt / meeting_cnt if meeting_cnt else 0.0
-            ai_ball = round(plan_pct * 60 + meet_pct * 40, 1)
+            formula_ball = round(plan_pct * 60 + meet_pct * 40, 1)
 
-            results.append(
-                {
-                    "district_id": district_id,
-                    "total_youth": youth_cnt,
-                    "total_masullar": masul_cnt,
-                    "total_plans": plan_cnt,
-                    "total_meetings": meeting_cnt,
-                    "bajarilish_pct": bajarilish,
-                    "ai_ball": ai_ball,
-                    "umumiy_ball": _umumiy_ball(youth_cnt, masul_cnt, bajarilish, ai_ball),
-                }
-            )
+            rows_data.append({
+                "district_id": district_id,
+                "total_youth": youth_cnt,
+                "total_masullar": masul_cnt,
+                "total_plans": plan_cnt,
+                "total_meetings": meeting_cnt,
+                "bajarilish_pct": bajarilish,
+                "_plan_pct": plan_pct,
+                "_meet_pct": meet_pct,
+                "_formula_ball": formula_ball,
+            })
+
+        # AI scoring — pass condensed data, fallback to formula on failure
+        from app.modules.ai.service import AiService
+        ai_input = [
+            {
+                "id": r["district_id"],
+                "plan_pct": round(r["_plan_pct"] * 100, 1),
+                "meet_pct": round(r["_meet_pct"] * 100, 1),
+                "youth": r["total_youth"],
+                "masullar": r["total_masullar"],
+            }
+            for r in rows_data
+        ]
+        ai_scores = await AiService().score_entities("tuman (district)", ai_input)
+
+        results = []
+        for r in rows_data:
+            ai_ball = ai_scores.get(r["district_id"], r["_formula_ball"])
+            results.append({
+                "district_id": r["district_id"],
+                "total_youth": r["total_youth"],
+                "total_masullar": r["total_masullar"],
+                "total_plans": r["total_plans"],
+                "total_meetings": r["total_meetings"],
+                "bajarilish_pct": r["bajarilish_pct"],
+                "ai_ball": ai_ball,
+                "umumiy_ball": _umumiy_ball(r["total_youth"], r["total_masullar"], r["bajarilish_pct"], ai_ball),
+            })
 
         results.sort(key=lambda r: r["umumiy_ball"], reverse=True)
         for i, row in enumerate(results, 1):
@@ -273,7 +301,7 @@ class MonitoringService:
             for r in (await self._session.execute(completed_stmt)).all()
         }
 
-        results = []
+        rows_data = []
         for org in orgs:
             youth_cnt = youth_by_org.get(org.id, 0)
             masul_cnt = masullar_by_org.get(org.id, 0)
@@ -282,20 +310,46 @@ class MonitoringService:
 
             bajarilish = round(completed_cnt / plan_cnt * 100, 1) if plan_cnt else 0.0
             plan_pct = completed_cnt / plan_cnt if plan_cnt else 0.0
-            ai_ball = round(plan_pct * 100, 1)
+            formula_ball = round(plan_pct * 100, 1)
 
-            results.append(
-                {
-                    "id": org.id,
-                    "name": org.name,
-                    "district_id": org.district_id,
-                    "total_masullar": masul_cnt,
-                    "total_youth": youth_cnt,
-                    "total_plans": plan_cnt,
-                    "bajarilish_pct": bajarilish,
-                    "ai_ball": ai_ball,
-                }
-            )
+            rows_data.append({
+                "id": org.id,
+                "name": org.name,
+                "district_id": org.district_id,
+                "total_masullar": masul_cnt,
+                "total_youth": youth_cnt,
+                "total_plans": plan_cnt,
+                "bajarilish_pct": bajarilish,
+                "_plan_pct": plan_pct,
+                "_formula_ball": formula_ball,
+            })
+
+        from app.modules.ai.service import AiService
+        ai_input = [
+            {
+                "id": str(r["id"]),
+                "name": r["name"],
+                "plan_pct": round(r["_plan_pct"] * 100, 1),
+                "youth": r["total_youth"],
+                "masullar": r["total_masullar"],
+            }
+            for r in rows_data
+        ]
+        ai_scores = await AiService().score_entities("tashkilot (organization)", ai_input)
+
+        results = []
+        for r in rows_data:
+            ai_ball = ai_scores.get(str(r["id"]), r["_formula_ball"])
+            results.append({
+                "id": r["id"],
+                "name": r["name"],
+                "district_id": r["district_id"],
+                "total_masullar": r["total_masullar"],
+                "total_youth": r["total_youth"],
+                "total_plans": r["total_plans"],
+                "bajarilish_pct": r["bajarilish_pct"],
+                "ai_ball": ai_ball,
+            })
 
         results.sort(key=lambda r: (r["ai_ball"], r["total_youth"]), reverse=True)
         for i, row in enumerate(results, 1):
@@ -384,7 +438,7 @@ class MonitoringService:
             for r in (await self._session.execute(attended_stmt)).all()
         }
 
-        results = []
+        rows_data = []
         for masul in masullar:
             youth_cnt = youth_by_masul.get(masul.id, 0)
             plan_cnt = plans_by_masul.get(masul.id, 0)
@@ -395,21 +449,49 @@ class MonitoringService:
             bajarilish = round(completed_cnt / plan_cnt * 100, 1) if plan_cnt else 0.0
             plan_pct = completed_cnt / plan_cnt if plan_cnt else 0.0
             meet_pct = attended_cnt / meeting_cnt if meeting_cnt else 0.0
-            ai_ball = round(plan_pct * 60 + meet_pct * 40, 1)
+            formula_ball = round(plan_pct * 60 + meet_pct * 40, 1)
 
-            results.append(
-                {
-                    "id": masul.id,
-                    "full_name": masul.full_name,
-                    "district_id": masul.district_id,
-                    "organization_id": masul.organization_id,
-                    "total_youth": youth_cnt,
-                    "total_plans": plan_cnt,
-                    "total_meetings": meeting_cnt,
-                    "bajarilish_pct": bajarilish,
-                    "ai_ball": ai_ball,
-                }
-            )
+            rows_data.append({
+                "id": masul.id,
+                "full_name": masul.full_name,
+                "district_id": masul.district_id,
+                "organization_id": masul.organization_id,
+                "total_youth": youth_cnt,
+                "total_plans": plan_cnt,
+                "total_meetings": meeting_cnt,
+                "bajarilish_pct": bajarilish,
+                "_plan_pct": plan_pct,
+                "_meet_pct": meet_pct,
+                "_formula_ball": formula_ball,
+            })
+
+        from app.modules.ai.service import AiService
+        ai_input = [
+            {
+                "id": str(r["id"]),
+                "name": r["full_name"],
+                "plan_pct": round(r["_plan_pct"] * 100, 1),
+                "meet_pct": round(r["_meet_pct"] * 100, 1),
+                "youth": r["total_youth"],
+            }
+            for r in rows_data
+        ]
+        ai_scores = await AiService().score_entities("mas'ul (supervisor)", ai_input)
+
+        results = []
+        for r in rows_data:
+            ai_ball = ai_scores.get(str(r["id"]), r["_formula_ball"])
+            results.append({
+                "id": r["id"],
+                "full_name": r["full_name"],
+                "district_id": r["district_id"],
+                "organization_id": r["organization_id"],
+                "total_youth": r["total_youth"],
+                "total_plans": r["total_plans"],
+                "total_meetings": r["total_meetings"],
+                "bajarilish_pct": r["bajarilish_pct"],
+                "ai_ball": ai_ball,
+            })
 
         results.sort(key=lambda r: (r["ai_ball"], r["total_youth"]), reverse=True)
         for i, row in enumerate(results, 1):

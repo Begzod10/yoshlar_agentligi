@@ -9,7 +9,7 @@ from app.modules.stats.schemas import AgencyStats, AiInsight
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """\
+_INSIGHTS_SYSTEM = """\
 Sen O'zbekiston yoshlar agentligi uchun tahlil qiluvchi AI yordamchisisan.
 Yoshlar agentligi — yosh fuqarolarning rivojlanishini kuzatib boradigan davlat tashkiloti.
 Mas'ullar yoshlar bilan ishlaydi, rejalar tuzadi va uchrashuvlar o'tkazadi.
@@ -21,7 +21,7 @@ Har bir tavsiya quyidagi JSON formatda bo'lsin:
 
 Turlar:
 - "positive": yaxshi natijalar (80%+ bajarilish, yuqori davomat)
-- "warning": e'tibor talab qiladigan holat (50–79%)
+- "warning": e'tibor talab qiladigan holat (50-79%)
 - "critical": jiddiy muammo (50% dan past ko'rsatkich)
 - "info": foydali ma'lumot yoki tavsiya
 
@@ -29,6 +29,25 @@ Qoidalar:
 - Faqat raqamlarni takrorlamang — aniq, amaliy tavsiya bering
 - Har bir matn 1-2 jumladan iborat bo'lsin
 - Faqat JSON massiv qaytaring, boshqa matn yo'q
+"""
+
+_SCORING_SYSTEM = """\
+Sen O'zbekiston yoshlar agentligi uchun reyting hisoblash AI yordamchisisang.
+Senga bir nechta {entity_type} ma'lumotlari beriladi. Har birini 0-100 ball bilan baholab ber.
+
+Baholash mezonlari:
+- Rejalar bajarilishi (plan_pct): asosiy mezon, og'irligi 55%
+- Uchrashuvlar davomati (meet_pct): ikkinchi mezon, og'irligi 35%
+- Nisbiy samaradorlik (guruh ichida taqqoslash): 10%
+
+Qoidalar:
+- Guruh ichida nisbiy baholash: eng yaxshisi 88-98 ball, eng yomoni 8-22 ball
+- O'rta ko'rsatkich: 45-65 ball atrofida
+- Barcha ko'rsatkichlar 0 bo'lsa ham minimal ball ber (8-15)
+- Ball 0.1 aniqlikda bo'lsin
+
+Faqat JSON massiv qaytargin, boshqa matn yo'q:
+[{{"id": "...", "score": 72.5}}, ...]
 """
 
 
@@ -67,7 +86,7 @@ class AiService:
             response = await self._client.chat.completions.create(
                 model="gpt-4.1-mini",
                 messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "system", "content": _INSIGHTS_SYSTEM},
                     {"role": "user", "content": context},
                 ],
                 temperature=0.4,
@@ -84,6 +103,40 @@ class AiService:
         except Exception as exc:
             logger.warning("AI insights generation failed, using static fallback: %s", exc)
             return _static_fallback(stats)
+
+    async def score_entities(
+        self,
+        entity_type: str,
+        entities: list[dict[str, Any]],
+    ) -> dict[str, float]:
+        """Score a list of entities 0-100. Returns {str(id): score}. Empty dict on failure."""
+        if self._client is None or not entities:
+            return {}
+
+        system = _SCORING_SYSTEM.format(entity_type=entity_type)
+        data = json.dumps(entities, ensure_ascii=False, default=str)
+
+        try:
+            response = await self._client.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": data},
+                ],
+                temperature=0.2,
+                max_tokens=1200,
+                timeout=20.0,
+            )
+            content = response.choices[0].message.content or "[]"
+            raw: list[dict[str, Any]] = json.loads(content)
+            return {
+                str(item["id"]): round(float(item["score"]), 1)
+                for item in raw
+                if isinstance(item, dict) and "id" in item and "score" in item
+            }
+        except Exception as exc:
+            logger.warning("AI scoring failed for %s, using formula: %s", entity_type, exc)
+            return {}
 
 
 def _static_fallback(stats: AgencyStats) -> list[AiInsight]:
