@@ -30,7 +30,7 @@ async def list_masullar(
     organization_id: UUID | None = Query(default=None),
     search: str | None = Query(default=None, min_length=1, max_length=255),
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=20, ge=1, le=200),
+    limit: int = Query(default=20, ge=1, le=1000),
 ) -> Page[MasulRead]:
     # tashkilot_direktori forced to own district
     if current.role == UserRole.TASHKILOT_DIREKTORI:

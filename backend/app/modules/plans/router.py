@@ -35,7 +35,7 @@ async def list_plans(
     youth_id: UUID | None = Query(default=None),
     status: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=20, ge=1, le=200),
+    limit: int = Query(default=20, ge=1, le=1000),
 ) -> Page[PlanRead]:
     params = PageParams(page=page, limit=limit)
     items, total = await PlansRepository(session).list_for_scope(

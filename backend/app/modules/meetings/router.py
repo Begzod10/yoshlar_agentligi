@@ -40,7 +40,7 @@ async def list_meetings(
     from_: datetime | None = Query(default=None, alias="from"),
     to: datetime | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=20, ge=1, le=200),
+    limit: int = Query(default=20, ge=1, le=1000),
 ) -> Page[MeetingRead]:
     params = PageParams(page=page, limit=limit)
     items, total = await MeetingsRepository(session).list_for_scope(
