@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { config } from "@/lib/config";
 import { getAccessToken } from "@/lib/auth/storage";
 import { api } from "@/lib/api/client";
@@ -683,3 +684,74 @@ export const downloadReport = {
   meetings: (districtId?: string, includePii = false) =>
     downloadCsv("/api/reports/meetings.csv", "meetings-report.csv", { district_id: districtId, include_pii: includePii }),
 };
+
+// ─── Monthly trend ────────────────────────────────────────────────────────────
+
+const MONTH_NAMES_UZ = [
+  "Yan", "Fev", "Mar", "Apr", "May", "Iyn",
+  "Iyl", "Avg", "Sen", "Okt", "Noy", "Dek",
+];
+
+function buildMonthRanges(count: number) {
+  const now = new Date();
+  return Array.from({ length: count }, (_, i) => {
+    const monthsAgo = count - 1 - i;
+    const d = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
+    const yyyy = d.getFullYear();
+    const mm   = String(d.getMonth() + 1).padStart(2, "0");
+    const last = new Date(yyyy, d.getMonth() + 1, 0).getDate();
+    return {
+      name: MONTH_NAMES_UZ[d.getMonth()],
+      from: `${yyyy}-${mm}-01`,
+      to:   `${yyyy}-${mm}-${String(last).padStart(2, "0")}`,
+    };
+  });
+}
+
+export function useMonthlyTrend(monthCount = 6) {
+  const months = useMemo(() => buildMonthRanges(monthCount), [monthCount]);
+
+  const youthQ = useQueries({
+    queries: months.map((m) => ({
+      queryKey: ["youth", "monthly", m.from, m.to],
+      queryFn:  () =>
+        api.get<Page<YouthRead>>("/api/youth", {
+          query: { from: m.from, to: m.to, page: 1, limit: 1 },
+        }),
+    })),
+  });
+
+  const plansQ = useQueries({
+    queries: months.map((m) => ({
+      queryKey: ["plans", "monthly", m.from, m.to],
+      queryFn:  () =>
+        api.get<Page<PlanRead>>("/api/plans", {
+          query: { from: m.from, to: m.to, page: 1, limit: 1 },
+        }),
+    })),
+  });
+
+  const meetingsQ = useQueries({
+    queries: months.map((m) => ({
+      queryKey: ["meetings", "monthly", m.from, m.to],
+      queryFn:  () =>
+        api.get<Page<MeetingRead>>("/api/meetings", {
+          query: { from: m.from, to: m.to, page: 1, limit: 1 },
+        }),
+    })),
+  });
+
+  const isLoading =
+    youthQ.some((q) => q.isLoading)    ||
+    plansQ.some((q) => q.isLoading)    ||
+    meetingsQ.some((q) => q.isLoading);
+
+  const chartData = months.map((m, i) => ({
+    name:         m.name,
+    yoshlar:      youthQ[i].data?.total    ?? 0,
+    rejalar:      plansQ[i].data?.total    ?? 0,
+    uchrashuvlar: meetingsQ[i].data?.total ?? 0,
+  }));
+
+  return { chartData, isLoading };
+}
