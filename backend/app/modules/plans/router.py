@@ -51,10 +51,10 @@ async def create_plan(
     payload: PlanCreate, current: Access, session: DbSession, audit: AuditDep
 ) -> PlanRead:
     plan = await _service(session).create(current, payload)
-    await audit.record(
-        "plan.create", "plan", plan.id,
-        after=PlanRead.model_validate(plan).model_dump(mode="json"),
-    )
+    plan_id = plan.id
+    await session.commit()
+    plan = await PlansRepository(session).get_by_id(plan_id)
+    await audit.record("plan.create", "plan", plan_id, after=PlanRead.model_validate(plan).model_dump(mode="json"))
     await session.commit()
     return PlanRead.model_validate(plan)
 
@@ -73,7 +73,9 @@ async def update_plan(
     session: DbSession,
     audit: AuditDep,
 ) -> PlanRead:
-    plan = await _service(session).update(current, plan_id, payload)
+    await _service(session).update(current, plan_id, payload)
+    await session.commit()
+    plan = await PlansRepository(session).get_by_id(plan_id)
     await audit.record(
         "plan.update", "plan", plan_id,
         before=payload.model_dump(exclude_unset=True, mode="json"),

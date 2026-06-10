@@ -56,10 +56,10 @@ async def create_meeting(
     payload: MeetingCreate, current: Access, session: DbSession, audit: AuditDep
 ) -> MeetingRead:
     meeting = await _service(session).create(current, payload)
-    await audit.record(
-        "meeting.create", "meeting", meeting.id,
-        after=MeetingRead.model_validate(meeting).model_dump(mode="json"),
-    )
+    meeting_id = meeting.id
+    await session.commit()
+    meeting = await MeetingsRepository(session).get_by_id(meeting_id)
+    await audit.record("meeting.create", "meeting", meeting_id, after=MeetingRead.model_validate(meeting).model_dump(mode="json"))
     await session.commit()
     return MeetingRead.model_validate(meeting)
 
@@ -80,7 +80,9 @@ async def update_meeting(
     session: DbSession,
     audit: AuditDep,
 ) -> MeetingRead:
-    meeting = await _service(session).update(current, meeting_id, payload)
+    await _service(session).update(current, meeting_id, payload)
+    await session.commit()
+    meeting = await MeetingsRepository(session).get_by_id(meeting_id)
     await audit.record(
         "meeting.update", "meeting", meeting_id,
         before=payload.model_dump(exclude_unset=True, mode="json"),
