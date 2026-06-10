@@ -65,7 +65,7 @@ class AiService:
 
         try:
             response = await self._client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4.1-mini",
                 messages=[
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": context},
