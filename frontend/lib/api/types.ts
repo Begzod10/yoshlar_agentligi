@@ -161,6 +161,8 @@ export interface PlanRead {
   startDate: string | null;
   endDate: string | null;
   createdAt: string;
+  notes: string | null;
+  attachments: MeetingAttachment[];
 }
 
 export interface PlanCreate {

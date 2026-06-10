@@ -3,6 +3,7 @@
 import { useApp } from "@/lib/app-context";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types";
+import { useRouter } from "next/navigation";
 import { Bell, Menu, User, LogOut, Settings, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +38,8 @@ interface TopbarProps {
 }
 
 export function Topbar({ onLogout }: TopbarProps) {
-  const { currentUser, sidebarOpen, setSidebarOpen, switchRole } = useApp();
+  const { currentUser, sidebarOpen, setSidebarOpen, switchRole, setCurrentPage } = useApp();
+  const router = useRouter();
 
   const getInitials = (name: string) => {
     return name
@@ -62,6 +64,7 @@ export function Topbar({ onLogout }: TopbarProps) {
           <Button
             variant="ghost"
             size="icon"
+            className="lg:hidden"
             onClick={() => setSidebarOpen(!sidebarOpen)}
           >
             <Menu className="h-5 w-5" />
@@ -184,11 +187,11 @@ export function Topbar({ onLogout }: TopbarProps) {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Mening hisobim</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { setCurrentPage("sozlamalar"); router.push("/sozlamalar?tab=profile"); }}>
                 <User className="mr-2 h-4 w-4" />
                 Profil
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { setCurrentPage("sozlamalar"); router.push("/sozlamalar"); }}>
                 <Settings className="mr-2 h-4 w-4" />
                 Sozlamalar
               </DropdownMenuItem>

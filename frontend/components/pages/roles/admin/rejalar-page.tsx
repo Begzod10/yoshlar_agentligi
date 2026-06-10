@@ -1,10 +1,13 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/lib/app-context";
 import { adminApi } from "@/lib/api/client";
-import type { PlanRead, YouthRead, MasulRead } from "@/lib/api/types";
+import { getAccessToken } from "@/lib/auth/storage";
+import { config } from "@/lib/config";
+import type { PlanRead, YouthRead, MasulRead, MeetingAttachment } from "@/lib/api/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
@@ -59,7 +62,49 @@ import {
   Sparkles,
   Loader2,
   X,
+  Maximize2,
+  Paperclip,
 } from "lucide-react";
+
+function isImage(att: MeetingAttachment) {
+  return att.content_type.startsWith("image/");
+}
+
+function attachmentUrl(att: MeetingAttachment) {
+  const p = att.path;
+  if (p.startsWith("http://") || p.startsWith("https://")) return p;
+  return `${config.apiUrl}/${p.replace(/^\//, "")}`;
+}
+
+function PlanFilePreview({ att, onFullscreen }: { att: MeetingAttachment; onFullscreen: (url: string) => void }) {
+  const url = attachmentUrl(att);
+  if (isImage(att)) {
+    return (
+      <div className="relative group rounded-lg overflow-hidden border bg-muted/30">
+        <img src={url} alt={att.filename} className="w-full max-h-48 object-contain" />
+        <button
+          onClick={() => onFullscreen(url)}
+          className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+          title="To'liq ekranda ko'rish"
+        >
+          <Maximize2 className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30 hover:bg-muted/60 transition-colors text-sm text-primary"
+    >
+      <Paperclip className="h-4 w-4 shrink-0" />
+      <span className="truncate">{att.filename}</span>
+      <span className="text-xs text-muted-foreground shrink-0">({Math.round(att.size / 1024)} KB)</span>
+    </a>
+  );
+}
 
 interface Milestone {
   week: number;
@@ -87,6 +132,9 @@ export function AdminRejalarPage() {
   const canAdd = isAdmin || isDirektor || isTashkilotDirektor || isMasul;
   const canDelete = isAdmin || isDirektor;
 
+  // ── Dialog state (declared before queries that depend on them) ─────────
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+
   // ── Data ──────────────────────────────────────────────────────────────
   const { data: plansData, isLoading: plansLoading } = useQuery({
     queryKey: ["admin-plans"],
@@ -100,8 +148,9 @@ export function AdminRejalarPage() {
     queryKey: ["admin-all-youth-plans"],
     queryFn: () =>
       adminApi.get<{ data: YouthRead[]; total: number }>("/api/youth", {
-        query: { page: 1, limit: 500 },
+        query: { page: 1, limit: 100 },
       }),
+    enabled: isMasul || isAddDialogOpen,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -134,13 +183,19 @@ export function AdminRejalarPage() {
   // ── Filter state ──────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isProgressDialogOpen, setIsProgressDialogOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanRead | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<PlanRead | null>(null);
   const [progressValue, setProgressValue] = useState(0);
   const [progressComment, setProgressComment] = useState("");
+  const [progressFile, setProgressFile] = useState<File | null>(null);
+  const [isCompleteDialogOpen, setIsCompleteDialogOpen] = useState(false);
+  const [completeNote, setCompleteNote] = useState("");
+  const [completeFile, setCompleteFile] = useState<File | null>(null);
+  const [completePlan, setCompletePlan] = useState<PlanRead | null>(null);
+
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   // AI state
   const [aiLoading, setAiLoading] = useState(false);
@@ -294,16 +349,34 @@ export function AdminRejalarPage() {
     setSelectedPlan(plan);
     setProgressValue(plan.progress);
     setProgressComment("");
+    setProgressFile(null);
     setIsProgressDialogOpen(true);
   };
 
   const handleUpdateProgress = async () => {
     if (!selectedPlan) return;
     try {
-      await adminApi.patch(`/api/plans/${selectedPlan.id}`, {
+      const body: Record<string, unknown> = {
         progress: progressValue,
         status: progressValue === 100 ? "completed" : "in_progress",
+      };
+      if (progressComment.trim()) body.notes = progressComment.trim();
+
+      const fd = new FormData();
+      fd.append("progress", String(progressValue));
+      fd.append("status", body.status as string);
+      if (progressComment.trim()) fd.append("notes", progressComment.trim());
+      if (progressFile) fd.append("attachment", progressFile, progressFile.name);
+
+      const token = getAccessToken();
+      const res = await fetch(`${config.apiUrl}/api/plans/${selectedPlan.id}`, {
+        method: "PATCH",
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: fd,
+        credentials: "include",
       });
+      if (!res.ok) throw new Error(res.statusText);
+
       await queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
       setIsProgressDialogOpen(false);
       addToast({ title: "Progress yangilandi", type: "success" });
@@ -312,10 +385,33 @@ export function AdminRejalarPage() {
     }
   };
 
-  const handleMarkCompleted = async (plan: PlanRead) => {
+  const openCompleteDialog = (plan: PlanRead) => {
+    setCompletePlan(plan);
+    setCompleteNote("");
+    setCompleteFile(null);
+    setIsCompleteDialogOpen(true);
+  };
+
+  const handleMarkCompleted = async () => {
+    if (!completePlan) return;
     try {
-      await adminApi.patch(`/api/plans/${plan.id}`, { status: "completed", progress: 100 });
+      const fd = new FormData();
+      fd.append("progress", "100");
+      fd.append("status", "completed");
+      if (completeNote.trim()) fd.append("notes", completeNote.trim());
+      if (completeFile) fd.append("attachment", completeFile, completeFile.name);
+
+      const token = getAccessToken();
+      const res = await fetch(`${config.apiUrl}/api/plans/${completePlan.id}`, {
+        method: "PATCH",
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: fd,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(res.statusText);
+
       await queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
+      setIsCompleteDialogOpen(false);
       addToast({ title: "Bajarildi deb belgilandi", type: "success" });
     } catch {
       addToast({ title: "Xatolik", description: "Holatni yangilashda xato", type: "error" });
@@ -510,7 +606,8 @@ export function AdminRejalarPage() {
       {/* Plans Table */}
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -597,7 +694,7 @@ export function AdminRejalarPage() {
                                 <PlayCircle className="mr-2 h-4 w-4" />
                                 Progressni yangilash
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => void handleMarkCompleted(plan)}>
+                              <DropdownMenuItem onClick={() => openCompleteDialog(plan)}>
                                 <CheckCircle className="mr-2 h-4 w-4" />
                                 Bajarildi
                               </DropdownMenuItem>
@@ -623,6 +720,60 @@ export function AdminRejalarPage() {
               )}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile card list */}
+          <div className="md:hidden">
+            {plansLoading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : filteredPlans.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>Rejalar topilmadi</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {filteredPlans.map((plan) => (
+                  <div key={plan.id} className="p-4">
+                    {/* Row 1: icon + title + status */}
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+                          <FileText className="h-5 w-5 text-primary" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{plan.title}</p>
+                          {plan.goal && <p className="text-xs text-muted-foreground truncate">{plan.goal}</p>}
+                        </div>
+                      </div>
+                      {getStatusBadge(plan.status)}
+                    </div>
+                    {/* Row 2: youth + masul + dates + progress */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 pl-[52px] text-sm">
+                      <span className="font-medium">{getYouthName(plan.youthId)}</span>
+                      {!isMasul && <span className="text-muted-foreground text-xs">{getMasulName(plan)}</span>}
+                      {(plan.startDate || plan.endDate) && (
+                        <span className="text-xs text-muted-foreground">{plan.startDate ?? "—"} → {plan.endDate ?? "—"}</span>
+                      )}
+                    </div>
+                    {/* Progress bar */}
+                    <div className="flex items-center gap-2 mb-3 pl-[52px]">
+                      <Progress value={plan.progress} className="flex-1 h-2" />
+                      <span className="text-xs font-medium w-8 text-right">{plan.progress}%</span>
+                    </div>
+                    {/* Row 3: action button */}
+                    <div className="flex items-center gap-2 pl-[52px]">
+                      <Button size="sm" variant="outline" className="h-8 text-xs bg-transparent"
+                        onClick={() => { setSelectedPlan(plan); setIsViewDialogOpen(true); }}>
+                        <Eye className="h-3.5 w-3.5 mr-1" />Ko'rish
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -733,14 +884,14 @@ export function AdminRejalarPage() {
 
       {/* View Plan Dialog */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Reja ma'lumotlari</DialogTitle>
           </DialogHeader>
           {selectedPlan && (
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto flex-1 pr-1">
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary/10">
+                <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary/10 shrink-0">
                   <FileText className="h-8 w-8 text-primary" />
                 </div>
                 <div>
@@ -761,13 +912,50 @@ export function AdminRejalarPage() {
                     <span className="font-medium">{val}</span>
                   </div>
                 ))}
-                <div className="flex justify-between items-center py-2">
+                <div className="flex justify-between items-center py-2 border-b">
                   <span className="text-muted-foreground">Progress</span>
                   <div className="flex items-center gap-2">
                     <Progress value={selectedPlan.progress} className="w-24 h-2" />
                     <span className="font-medium">{selectedPlan.progress}%</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Notes */}
+              {selectedPlan.notes && (
+                <div className="rounded-lg border p-3 space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Izoh</p>
+                  <p className="text-sm">{selectedPlan.notes}</p>
+                </div>
+              )}
+
+              {/* Attachments */}
+              {selectedPlan.attachments.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Fayllar</p>
+                  {selectedPlan.attachments.map((att, i) => (
+                    <PlanFilePreview key={i} att={att} onFullscreen={setLightboxUrl} />
+                  ))}
+                </div>
+              )}
+
+              <div className="md:hidden flex flex-wrap gap-2 pt-2">
+                {selectedPlan.status !== "completed" && (
+                  <>
+                    <Button className="flex-1" onClick={() => { setIsViewDialogOpen(false); openProgressDialog(selectedPlan); }}>
+                      <PlayCircle className="mr-2 h-4 w-4" />Progressni yangilash
+                    </Button>
+                    <Button variant="outline" className="flex-1" onClick={() => { setIsViewDialogOpen(false); openCompleteDialog(selectedPlan); }}>
+                      <CheckCircle className="mr-2 h-4 w-4" />Bajarildi
+                    </Button>
+                  </>
+                )}
+                {canDelete && (
+                  <Button variant="outline" className="w-full text-destructive border-destructive/30 hover:bg-destructive/5"
+                    onClick={() => { setIsViewDialogOpen(false); setDeleteCandidate(selectedPlan); }}>
+                    <Trash2 className="mr-2 h-4 w-4" />O'chirish
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -776,12 +964,25 @@ export function AdminRejalarPage() {
 
       {/* Progress Update Dialog */}
       <Dialog open={isProgressDialogOpen} onOpenChange={setIsProgressDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[400px] max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Progressni yangilash</DialogTitle>
             <DialogDescription>{selectedPlan?.title}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-5 py-2">
+          <div className="space-y-5 py-2 overflow-y-auto flex-1 pr-1">
+            {/* Existing notes/attachments from plan */}
+            {(selectedPlan?.notes || (selectedPlan?.attachments?.length ?? 0) > 0) && (
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Oldingi yangilanish</p>
+                {selectedPlan?.notes && (
+                  <p className="text-sm">{selectedPlan.notes}</p>
+                )}
+                {selectedPlan?.attachments?.map((att, i) => (
+                  <PlanFilePreview key={i} att={att} onFullscreen={setLightboxUrl} />
+                ))}
+              </div>
+            )}
+
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label>Bajarilish darajasi</Label>
@@ -810,10 +1011,97 @@ export function AdminRejalarPage() {
                 placeholder="Bu yangilanish haqida qisqacha..." rows={2}
               />
             </div>
+            <div className="space-y-2">
+              <Label>Fayl biriktirish (ixtiyoriy)</Label>
+              <input
+                type="file"
+                accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                className="block w-full text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-border file:text-xs file:bg-muted file:text-foreground hover:file:bg-muted/80 cursor-pointer"
+                onChange={(e) => setProgressFile(e.target.files?.[0] ?? null)}
+              />
+              {progressFile && (
+                progressFile.type.startsWith("image/") ? (
+                  <div className="relative group rounded-lg overflow-hidden border bg-muted/30">
+                    <img
+                      src={URL.createObjectURL(progressFile)}
+                      alt={progressFile.name}
+                      className="w-full max-h-48 object-contain"
+                    />
+                    <button
+                      onClick={() => setLightboxUrl(URL.createObjectURL(progressFile))}
+                      className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="To'liq ekranda ko'rish"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </button>
+                    <p className="text-xs text-muted-foreground px-2 py-1.5">{progressFile.name} ({Math.round(progressFile.size / 1024)} KB)</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Tanlandi: {progressFile.name} ({Math.round(progressFile.size / 1024)} KB)</p>
+                )
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsProgressDialogOpen(false)}>Bekor</Button>
             <Button id="btn-save-progress" onClick={handleUpdateProgress}>Saqlash</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bajarildi Dialog */}
+      <Dialog open={isCompleteDialogOpen} onOpenChange={setIsCompleteDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Bajarildi deb belgilash</DialogTitle>
+            <DialogDescription>{completePlan?.title}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-accent/10 text-accent text-sm">
+              <CheckCircle className="h-4 w-4 shrink-0" />
+              Progress 100% ga o'rnatiladi va reja yakunlanadi
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="complete-note">Izoh (ixtiyoriy)</Label>
+              <Textarea
+                id="complete-note"
+                value={completeNote}
+                onChange={(e) => setCompleteNote(e.target.value)}
+                placeholder="Yakunlash haqida qisqacha..."
+                rows={2}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Fayl biriktirish (ixtiyoriy)</Label>
+              <input
+                type="file"
+                accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                className="block w-full text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-border file:text-xs file:bg-muted file:text-foreground hover:file:bg-muted/80 cursor-pointer"
+                onChange={(e) => setCompleteFile(e.target.files?.[0] ?? null)}
+              />
+              {completeFile && (
+                completeFile.type.startsWith("image/") ? (
+                  <div className="relative group rounded-lg overflow-hidden border bg-muted/30">
+                    <img src={URL.createObjectURL(completeFile)} alt={completeFile.name} className="w-full max-h-36 object-contain" />
+                    <button
+                      onClick={() => setLightboxUrl(URL.createObjectURL(completeFile))}
+                      className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </button>
+                    <p className="text-xs text-muted-foreground px-2 py-1">{completeFile.name} ({Math.round(completeFile.size / 1024)} KB)</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Tanlandi: {completeFile.name} ({Math.round(completeFile.size / 1024)} KB)</p>
+                )
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCompleteDialogOpen(false)}>Bekor</Button>
+            <Button onClick={handleMarkCompleted}>
+              <CheckCircle className="mr-2 h-4 w-4" />Bajarildi
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -829,6 +1117,29 @@ export function AdminRejalarPage() {
         onConfirm={confirmDeletePlan}
         onCancel={() => setDeleteCandidate(null)}
       />
+
+      {/* Lightbox — portal to document.body so Radix Dialog doesn't intercept pointer events */}
+      {lightboxUrl && createPortal(
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 cursor-zoom-out"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            onClick={(e) => { e.stopPropagation(); setLightboxUrl(null); }}
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Fayl ko'rinishi"
+            className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

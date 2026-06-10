@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/lib/app-context";
 import { adminApi } from "@/lib/api/client";
@@ -66,6 +67,8 @@ import {
   Phone,
   Loader2,
   Paperclip,
+  Maximize2,
+  X,
 } from "lucide-react";
 
 type MeetingStatus = MeetingRead["attendanceStatus"];
@@ -131,6 +134,7 @@ export function AdminUchrashuvlarPage() {
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   // ── District-filtered data for add form ───────────────────────────────
   const { data: formYouthData, isFetching: youthFetching } = useQuery({
@@ -515,7 +519,8 @@ export function AdminUchrashuvlarPage() {
       {/* Meetings Table */}
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -584,32 +589,20 @@ export function AdminUchrashuvlarPage() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Amallar</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedMeeting(meeting);
-                                setIsViewDialogOpen(true);
-                              }}
-                            >
-                              <Eye className="mr-2 h-4 w-4" />
-                              Ko'rish
+                            <DropdownMenuItem onClick={() => { setSelectedMeeting(meeting); setIsViewDialogOpen(true); }}>
+                              <Eye className="mr-2 h-4 w-4" />Ko'rish
                             </DropdownMenuItem>
-                            {(meeting.attendanceStatus === "scheduled" ||
-                              meeting.attendanceStatus === "rescheduled") && (
+                            {(meeting.attendanceStatus === "scheduled" || meeting.attendanceStatus === "rescheduled") && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={() => openAttendModal(meeting)}>
-                                  <ClipboardCheck className="mr-2 h-4 w-4" />
-                                  Qatnashuvni belgilash
+                                  <ClipboardCheck className="mr-2 h-4 w-4" />Qatnashuvni belgilash
                                 </DropdownMenuItem>
                               </>
                             )}
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => setDeleteCandidate(meeting)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              O'chirish
+                            <DropdownMenuItem className="text-destructive" onClick={() => setDeleteCandidate(meeting)}>
+                              <Trash2 className="mr-2 h-4 w-4" />O'chirish
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -620,6 +613,62 @@ export function AdminUchrashuvlarPage() {
               )}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile card list */}
+          <div className="md:hidden">
+            {meetingsLoading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : filteredMeetings.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>Uchrashuvlar topilmadi</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {filteredMeetings.map((meeting) => {
+                  const { date, time } = parseDateParts(meeting.scheduledAt);
+                  const canMarkAttend = meeting.attendanceStatus === "scheduled" || meeting.attendanceStatus === "rescheduled";
+                  return (
+                    <div key={meeting.id} className="p-4">
+                      {/* Row 1: icon + label + status */}
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+                            <Calendar className="h-5 w-5 text-primary" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{getMeetingLabel(meeting)}</p>
+                            <p className="text-xs text-muted-foreground">{meeting.masulName ?? "—"}</p>
+                          </div>
+                        </div>
+                        {getStatusBadge(meeting.attendanceStatus)}
+                      </div>
+                      {/* Row 2: youth + date + type */}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 pl-[52px] text-sm">
+                        <span className="font-medium">{getYouthName(meeting.youthId)}</span>
+                        <span className="text-muted-foreground">{date} {time}</span>
+                        {getTypeBadge(meeting.type)}
+                        {meeting.location && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <MapPin className="h-3 w-3" />{meeting.location}
+                          </span>
+                        )}
+                      </div>
+                      {/* Row 3: action button */}
+                      <div className="flex items-center gap-2 pl-[52px]">
+                        <Button size="sm" variant="outline" className="h-8 text-xs bg-transparent"
+                          onClick={() => { setSelectedMeeting(meeting); setIsViewDialogOpen(true); }}>
+                          <Eye className="h-3.5 w-3.5 mr-1" />Ko'rish
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -824,25 +873,49 @@ export function AdminUchrashuvlarPage() {
                   {selectedMeeting.attachments.length > 0 && (
                     <div className="pt-2 border-t">
                       <span className="text-muted-foreground text-sm block mb-2">Ilovalar</span>
-                      <div className="space-y-1.5">
-                        {selectedMeeting.attachments.map((att, i) => (
-                          <a
-                            key={i}
-                            href={`${config.apiUrl}${att.path}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 text-sm text-primary hover:underline"
-                          >
-                            <Paperclip className="h-3.5 w-3.5 shrink-0" />
-                            <span className="truncate">{att.filename}</span>
-                            <span className="text-xs text-muted-foreground shrink-0">
-                              ({Math.round(att.size / 1024)} KB)
-                            </span>
-                          </a>
-                        ))}
+                      <div className="space-y-2">
+                        {selectedMeeting.attachments.map((att, i) => {
+                          const url = `${config.apiUrl}${att.path}`;
+                          const isImg = att.content_type.startsWith("image/");
+                          return isImg ? (
+                            <div key={i} className="relative group rounded-lg overflow-hidden border bg-muted/30">
+                              <img src={url} alt={att.filename} className="w-full max-h-48 object-contain" />
+                              <button
+                                onClick={() => setLightboxUrl(url)}
+                                className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Maximize2 className="h-4 w-4" />
+                              </button>
+                              <p className="text-xs text-muted-foreground px-2 py-1">{att.filename} ({Math.round(att.size / 1024)} KB)</p>
+                            </div>
+                          ) : (
+                            <a
+                              key={i}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30 hover:bg-muted/60 transition-colors text-sm text-primary"
+                            >
+                              <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{att.filename}</span>
+                              <span className="text-xs text-muted-foreground shrink-0">({Math.round(att.size / 1024)} KB)</span>
+                            </a>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
+                </div>
+                <div className="md:hidden flex gap-2 pt-2">
+                  {(selectedMeeting.attendanceStatus === "scheduled" || selectedMeeting.attendanceStatus === "rescheduled") && (
+                    <Button className="flex-1" onClick={() => { setIsViewDialogOpen(false); openAttendModal(selectedMeeting); }}>
+                      <ClipboardCheck className="mr-2 h-4 w-4" />Qatnashuvni belgilash
+                    </Button>
+                  )}
+                  <Button variant="outline" className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/5"
+                    onClick={() => { setIsViewDialogOpen(false); setDeleteCandidate(selectedMeeting); }}>
+                    <Trash2 className="mr-2 h-4 w-4" />O'chirish
+                  </Button>
                 </div>
               </div>
             );
@@ -944,7 +1017,20 @@ export function AdminUchrashuvlarPage() {
                   onChange={(e) => setAttachmentFile(e.target.files?.[0] ?? null)}
                 />
                 {attachmentFile && (
-                  <p className="text-xs text-muted-foreground">Tanlandi: {attachmentFile.name}</p>
+                  attachmentFile.type.startsWith("image/") ? (
+                    <div className="relative group rounded-lg overflow-hidden border bg-muted/30">
+                      <img src={URL.createObjectURL(attachmentFile)} alt={attachmentFile.name} className="w-full max-h-48 object-contain" />
+                      <button
+                        onClick={() => setLightboxUrl(URL.createObjectURL(attachmentFile))}
+                        className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Maximize2 className="h-4 w-4" />
+                      </button>
+                      <p className="text-xs text-muted-foreground px-2 py-1">{attachmentFile.name} ({Math.round(attachmentFile.size / 1024)} KB)</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Tanlandi: {attachmentFile.name} ({Math.round(attachmentFile.size / 1024)} KB)</p>
+                  )
                 )}
               </div>
             </div>
@@ -974,6 +1060,28 @@ export function AdminUchrashuvlarPage() {
         onConfirm={confirmDeleteMeeting}
         onCancel={() => setDeleteCandidate(null)}
       />
+
+      {lightboxUrl && createPortal(
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 cursor-zoom-out"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            onClick={(e) => { e.stopPropagation(); setLightboxUrl(null); }}
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Fayl ko'rinishi"
+            className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

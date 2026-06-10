@@ -100,7 +100,7 @@ export function Sidebar({
       title: "Chiqarilgan yoshlar",
       id: "chiqarilgan",
       icon: UserMinus,
-      roles: ["admin", "direktor", "tashkilot_direktori"],
+      roles: ["direktor", "tashkilot_direktori"],
     },
     {
       title: "Foydalanuvchilar",

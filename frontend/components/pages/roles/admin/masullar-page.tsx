@@ -95,6 +95,12 @@ export function AdminMasullarPage() {
     return m;
   }, [orgsData]);
 
+  const orgObjectMap = useMemo(() => {
+    const m: Record<string, OrganizationRead> = {};
+    for (const o of orgsData?.data ?? []) m[o.id] = o;
+    return m;
+  }, [orgsData]);
+
   // ── Filter state ──────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
   const [districtFilter, setDistrictFilter] = useState("all");
@@ -104,6 +110,8 @@ export function AdminMasullarPage() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedMasul, setSelectedMasul] = useState<MasulRead | null>(null);
+  const [selectedOrgProfile, setSelectedOrgProfile] = useState<OrganizationRead | null>(null);
+  const [isOrgProfileOpen, setIsOrgProfileOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<MasulRead | null>(null);
   const [passwordMasul, setPasswordMasul] = useState<MasulRead | null>(null);
   const [addDistrict, setAddDistrict] = useState(
@@ -317,7 +325,8 @@ export function AdminMasullarPage() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -362,9 +371,19 @@ export function AdminMasullarPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm">
-                        {masul.organizationId ? (orgMap[masul.organizationId] ?? masul.organizationId.slice(0, 8) + "...") : "—"}
-                      </span>
+                      {masul.organizationId ? (
+                        <button
+                          className="text-sm text-primary underline decoration-dotted hover:decoration-solid hover:text-primary/80 transition-colors cursor-pointer text-left"
+                          onClick={() => {
+                            const org = orgObjectMap[masul.organizationId!];
+                            if (org) { setSelectedOrgProfile(org); setIsOrgProfileOpen(true); }
+                          }}
+                        >
+                          {orgMap[masul.organizationId] ?? masul.organizationId.slice(0, 8) + "..."}
+                        </button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">{masul.position ?? "—"}</span>
@@ -379,39 +398,22 @@ export function AdminMasullarPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Amallar</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSelectedMasul(masul);
-                              setIsViewDialogOpen(true);
-                            }}
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            Ko'rish
+                          <DropdownMenuItem onClick={() => { setSelectedMasul(masul); setIsViewDialogOpen(true); }}>
+                            <Eye className="mr-2 h-4 w-4" />Ko'rish
                           </DropdownMenuItem>
                           {canEdit && (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedMasul(masul);
-                                setIsEditDialogOpen(true);
-                              }}
-                            >
-                              <Edit className="mr-2 h-4 w-4" />
-                              Tahrirlash
+                            <DropdownMenuItem onClick={() => { setSelectedMasul(masul); setIsEditDialogOpen(true); }}>
+                              <Edit className="mr-2 h-4 w-4" />Tahrirlash
                             </DropdownMenuItem>
                           )}
                           {isAdmin && (
                             <DropdownMenuItem onClick={() => setPasswordMasul(masul)}>
-                              <KeyRound className="mr-2 h-4 w-4" />
-                              Parolni o'zgartirish
+                              <KeyRound className="mr-2 h-4 w-4" />Parolni o'zgartirish
                             </DropdownMenuItem>
                           )}
                           {isAdmin && (
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => setDeleteCandidate(masul)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              O'chirish
+                            <DropdownMenuItem className="text-destructive" onClick={() => setDeleteCandidate(masul)}>
+                              <Trash2 className="mr-2 h-4 w-4" />O'chirish
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
@@ -422,6 +424,65 @@ export function AdminMasullarPage() {
               )}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile card list */}
+          <div className="md:hidden">
+            {isLoading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : filteredMasullar.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <UserCheck className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>Mas'ul hodimlar topilmadi</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {filteredMasullar.map((masul) => (
+                  <div key={masul.id} className="p-4">
+                    {/* Row 1: avatar + name + district */}
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 shrink-0">
+                          <UserCheck className="h-5 w-5 text-accent" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{masul.fullName}</p>
+                          <p className="text-xs text-muted-foreground truncate">{masul.email}</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="gap-1 shrink-0 text-xs">
+                        <MapPin className="h-3 w-3" />
+                        {masul.districtId}
+                      </Badge>
+                    </div>
+                    {/* Row 2: org + position */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 pl-[52px] text-sm text-muted-foreground">
+                      {masul.organizationId && (
+                        <button
+                          className="text-xs text-primary underline decoration-dotted hover:decoration-solid cursor-pointer truncate max-w-[180px]"
+                          onClick={() => {
+                            const org = orgObjectMap[masul.organizationId!];
+                            if (org) { setSelectedOrgProfile(org); setIsOrgProfileOpen(true); }
+                          }}
+                        >
+                          {orgMap[masul.organizationId] ?? masul.organizationId.slice(0, 8) + "..."}
+                        </button>
+                      )}
+                      {masul.position && <span className="text-xs">{masul.position}</span>}
+                    </div>
+                    {/* Row 3: action button */}
+                    <div className="flex items-center gap-2 pl-[52px]">
+                      <Button size="sm" variant="outline" className="h-8 text-xs bg-transparent"
+                        onClick={() => { setSelectedMasul(masul); setIsViewDialogOpen(true); }}>
+                        <Eye className="h-3.5 w-3.5 mr-1" />Ko'rish
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -561,6 +622,26 @@ export function AdminMasullarPage() {
                   </div>
                 ))}
               </div>
+              {(canEdit || isAdmin) && (
+                <div className="md:hidden flex flex-wrap gap-2 pt-2">
+                  {canEdit && (
+                    <Button className="flex-1" onClick={() => { setIsViewDialogOpen(false); setIsEditDialogOpen(true); }}>
+                      <Edit className="mr-2 h-4 w-4" />Tahrirlash
+                    </Button>
+                  )}
+                  {isAdmin && (
+                    <Button variant="outline" onClick={() => { setIsViewDialogOpen(false); setPasswordMasul(selectedMasul); }}>
+                      <KeyRound className="mr-2 h-4 w-4" />Parol
+                    </Button>
+                  )}
+                  {isAdmin && (
+                    <Button variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/5"
+                      onClick={() => { setIsViewDialogOpen(false); setDeleteCandidate(selectedMasul); }}>
+                      <Trash2 className="mr-2 h-4 w-4" />O'chirish
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
@@ -679,6 +760,47 @@ export function AdminMasullarPage() {
         onConfirm={confirmDeleteMasul}
         onCancel={() => setDeleteCandidate(null)}
       />
+
+      {/* Organization Profile Dialog */}
+      <Dialog open={isOrgProfileOpen} onOpenChange={setIsOrgProfileOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Tashkilot ma'lumotlari</DialogTitle>
+          </DialogHeader>
+          {selectedOrgProfile && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 shrink-0">
+                  <Users className="h-7 w-7 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold leading-tight">{selectedOrgProfile.name}</h3>
+                  {selectedOrgProfile.type && (
+                    <p className="text-sm text-muted-foreground">{selectedOrgProfile.type}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid gap-0 divide-y">
+                {[
+                  { label: "Tuman", val: selectedOrgProfile.districtId },
+                  { label: "Rahbar", val: selectedOrgProfile.headName ?? "—" },
+                  { label: "Telefon", val: selectedOrgProfile.contactPhone ?? "—" },
+                  { label: "Manzil", val: selectedOrgProfile.address ?? "—" },
+                  {
+                    label: "Qo'shilgan sana",
+                    val: new Date(selectedOrgProfile.createdAt).toLocaleDateString("uz-UZ"),
+                  },
+                ].map(({ label, val }) => (
+                  <div key={label} className="flex justify-between py-2.5">
+                    <span className="text-muted-foreground text-sm">{label}</span>
+                    <span className="font-medium text-sm text-right max-w-[55%]">{val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

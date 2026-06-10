@@ -58,7 +58,11 @@ function snakeize<T>(value: unknown): T {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
-  const url = new URL(path.startsWith("http") ? path : `${config.apiUrl}${path}`);
+  const resolved = path.startsWith("http") ? path : `${config.apiUrl}${path}`;
+  const base = resolved.startsWith("/") && typeof window !== "undefined"
+    ? window.location.origin
+    : undefined;
+  const url = base ? new URL(resolved, base) : new URL(resolved);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
       if (v !== undefined && v !== null) url.searchParams.set(camelToSnake(k), String(v));
@@ -120,7 +124,11 @@ export async function adminApiFetch<T>(path: string, options: RequestOptions = {
   const { body, headers, query, ...rest } = options;
   const token = getAccessToken();
 
-  const url = new URL(path.startsWith("http") ? path : `${config.apiUrl}${path}`);
+  const adminResolved = path.startsWith("http") ? path : `${config.apiUrl}${path}`;
+  const adminBase = adminResolved.startsWith("/") && typeof window !== "undefined"
+    ? window.location.origin
+    : undefined;
+  const url = adminBase ? new URL(adminResolved, adminBase) : new URL(adminResolved);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
       if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
