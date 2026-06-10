@@ -46,7 +46,7 @@ class PlansService:
             masul_id=youth.masul_id,
             title=payload.title,
             goal=payload.goal,
-            milestones=[m.model_dump() for m in payload.milestones],
+            milestones=[m.model_dump(mode="json") for m in payload.milestones],
             status=PlanStatus.DRAFT,
             progress=0,
             start_date=payload.start_date,
