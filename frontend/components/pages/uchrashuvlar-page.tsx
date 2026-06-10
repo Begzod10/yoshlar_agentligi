@@ -315,7 +315,7 @@ export function UchrashuvlarPage() {
 
   const weekDays = getWeekDays();
   const dayLabels = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"];
-
+  console.log(allVisibleMeetings)
   return (
     <div className="space-y-6">
       {/* Header */}

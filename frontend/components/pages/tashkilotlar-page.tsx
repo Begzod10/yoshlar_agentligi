@@ -4,9 +4,10 @@ import React from "react"
 
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
-import { downloadReport, useOrganizations } from "@/lib/api/hooks/use-core-api";
+import { downloadReport } from "@/lib/api/hooks/use-core-api";
 import { usePageDataContext } from "@/lib/page-data-context";
 import { ResourcePagination } from "@/components/app/resource-pagination";
+import { useOrganizations } from "@/lib/api/hooks/use-core-api";
 import type { Organization, ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -114,22 +115,38 @@ export function TashkilotlarPage() {
     });
   }, [effectiveDistrict, pageData, searchQuery]);
 
+  // Filter organizations based on role and selection
+  let filteredOrganizations = organizations.filter((org) => {
+    // Role-based filtering
+    // if (isTashkilotDirektor && currentUser?.districtId) {
+    //   if (org.districtId !== currentUser.districtId) return false;
+    // }
+    //
+    // // Global district filter
+    // if (selectedDistrict && org.districtId !== selectedDistrict) return false;
+    //
+    // // Local district filter
+    // if (districtFilter !== "all" && org.districtId !== districtFilter) return false;
+
   const filteredOrganizations = organizations;
 
-  const handleExport = () => {
-    void downloadReport
-      .organizations(effectiveDistrict)
-      .then(() => showToast("Export yuklab olindi", "success"))
-      .catch((error) =>
-        showToast(error instanceof Error ? error.message : "Export yuklanmadi", "error")
-      );
-  };
+
+    // return matchesSearch;
+  });
+    console.log(organizations, 'user')
 
   // Get available districts for filter
   const availableDistricts = isTashkilotDirektor && currentUser?.districtId
     ? [currentUser.districtId]
     : TOSHKENT_VILOYATI_DISTRICTS;
-
+  const handleExport = () => {
+    void downloadReport
+        .organizations(effectiveDistrict)
+        .then(() => showToast("Export yuklab olindi", "success"))
+        .catch((error) =>
+            showToast(error instanceof Error ? error.message : "Export yuklanmadi", "error")
+        );
+  };
   // Statistics
   const totalOrganizations = filteredOrganizations.length;
   const totalMasullar = filteredOrganizations.reduce((sum, org) => sum + org.masullarCount, 0);

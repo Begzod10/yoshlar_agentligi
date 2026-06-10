@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/app-context";
+import { useAgencyStats, usePlans } from "@/lib/api/hooks/use-core-api";
 import { APP_PAGE_HREFS, type AppPageId } from "@/lib/navigation";
 import type { UserRole } from "@/lib/types";
 import {
@@ -44,11 +45,20 @@ export function Sidebar({
 }: {
   currentPage: string;
 }) {
-  const { currentUser, sidebarOpen, setSidebarOpen, getVisibleYouth, getVisiblePlans, getVisibleMeetings } = useApp();
+  const { currentUser, sidebarOpen, setSidebarOpen } = useApp();
+  console.log(currentPage)
+  // Real API counts for badges
+  const { data: stats } = useAgencyStats();
+  const { data: inProgressPlans } = usePlans({ status: "in_progress", page: 1, limit: 1 });
 
-  const visibleYouth = getVisibleYouth();
-  const visiblePlans = getVisiblePlans();
-  const visibleMeetings = getVisibleMeetings();
+  const activeYouthCount      = stats?.activeYouth        ?? 0;
+  const orgCount              = stats?.totalOrganizations  ?? 0;
+  const masulCount            = stats?.totalMasullar       ?? 0;
+  const inProgressPlanCount   = inProgressPlans?.total     ?? 0;
+  const scheduledMeetingCount = stats
+    ? Math.max(0, (stats.totalMeetings ?? 0) - (stats.attendedMeetings ?? 0))
+    : 0;
+  const graduatedCount        = stats?.graduatedYouth      ?? 0;
 
   const navItems: NavItem[] = [
     {
@@ -62,33 +72,35 @@ export function Sidebar({
       id: "yoshlar",
       icon: Users,
       roles: ["admin", "direktor", "tashkilot_direktori", "masul_hodim"],
-      getBadge: () => visibleYouth.filter((y) => y.status === "active").length || undefined,
+      getBadge: () => activeYouthCount || undefined,
     },
     {
       title: "Tashkilotlar",
       id: "tashkilotlar",
       icon: Building2,
       roles: ["admin", "direktor", "moderator"],
+      getBadge: () => orgCount || undefined,
     },
     {
       title: "Mas'ullar",
       id: "masullar",
       icon: UserCheck,
       roles: ["admin", "direktor", "tashkilot_direktori"],
+      getBadge: () => masulCount || undefined,
     },
     {
       title: "Individual rejalar",
       id: "rejalar",
       icon: FileText,
       roles: ["admin", "direktor", "tashkilot_direktori", "masul_hodim"],
-      getBadge: () => visiblePlans.filter((p) => p.status === "in_progress").length || undefined,
+      getBadge: () => inProgressPlanCount || undefined,
     },
     {
       title: "Uchrashuvlar",
       id: "uchrashuvlar",
       icon: Calendar,
       roles: ["admin", "direktor", "tashkilot_direktori", "masul_hodim"],
-      getBadge: () => visibleMeetings.filter((m) => m.status === "scheduled").length || undefined,
+      getBadge: () => scheduledMeetingCount || undefined,
     },
     {
       title: "Monitoring",
@@ -101,6 +113,7 @@ export function Sidebar({
       id: "chiqarilgan",
       icon: UserMinus,
       roles: ["direktor", "tashkilot_direktori"],
+      getBadge: () => graduatedCount || undefined,
     },
     {
       title: "Foydalanuvchilar",

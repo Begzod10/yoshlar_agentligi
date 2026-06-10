@@ -78,6 +78,7 @@ export interface OrganizationRead {
   districtId: string;
   type: string | null;
   contactPhone: string | null;
+  directorName: string
   address: string | null;
   headName: string | null;
   createdAt: string;
