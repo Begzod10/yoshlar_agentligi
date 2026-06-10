@@ -292,43 +292,6 @@ class StatsService:
         ]
 
     async def ai_insights(self) -> list[AiInsight]:
+        from app.modules.ai.service import AiService
         stats = await self.agency_stats()
-        insights: list[AiInsight] = []
-
-        bajarilish = round(stats.completed_plans / stats.total_plans * 100) if stats.total_plans else 0
-        if bajarilish >= 80:
-            insights.append(AiInsight(
-                type="positive",
-                text=f"Rejalar bajarish darajasi {bajarilish}% — bu a'lo natija! Yoshlar maqsadlarga intilmoqda.",
-            ))
-        elif bajarilish >= 50:
-            insights.append(AiInsight(
-                type="info",
-                text=f"Rejalar bajarish darajasi {bajarilish}%. Yaxshi natija, ammo yaxshilash imkoni bor.",
-            ))
-        else:
-            insights.append(AiInsight(
-                type="warning",
-                text=f"Rejalar bajarish darajasi {bajarilish}% — past ko'rsatkich. Mas'ullar bilan ishlash zarur.",
-            ))
-
-        attend_pct = round(stats.attended_meetings / stats.total_meetings * 100) if stats.total_meetings else 0
-        if attend_pct >= 75:
-            insights.append(AiInsight(
-                type="positive",
-                text=f"Uchrashuvlarga davomat {attend_pct}% — yoshlar faol ishtirok etmoqda.",
-            ))
-        else:
-            insights.append(AiInsight(
-                type="warning",
-                text=f"Uchrashuvlarga davomat {attend_pct}%. Davomat ko'rsatkichini oshirish tavsiya etiladi.",
-            ))
-
-        if stats.active_youth > 0 and stats.total_masullar > 0:
-            ratio = round(stats.active_youth / stats.total_masullar, 1)
-            insights.append(AiInsight(
-                type="info",
-                text=f"Har bir mas'ulga o'rtacha {ratio} nafar faol yosh to'g'ri keladi.",
-            ))
-
-        return insights
+        return await AiService().generate_insights(stats)
