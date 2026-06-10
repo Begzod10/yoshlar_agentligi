@@ -4,6 +4,10 @@ import { mockYouth } from "@/lib/mock-data";
 
 export const maxDuration = 30;
 
+function isAiConfigured() {
+  return Boolean(process.env.AI_GATEWAY_API_KEY);
+}
+
 const youthAnalysisSchema = z.object({
   riskLevel: z.enum(["past", "o'rta", "yuqori"]).describe("Xavf darajasi"),
   riskScore: z.number().min(0).max(100).describe("Xavf balli (0-100)"),
@@ -50,6 +54,14 @@ function checkYouthOwnership(youthId: string, userId?: string): {
 }
 
 export async function POST(req: Request) {
+  if (!isAiConfigured()) {
+    return Response.json(
+      { error: "AI_GATEWAY_API_KEY sozlanmagan" },
+      { status: 503 }
+    );
+  }
+
+  const { type, data } = await req.json();
   let body: Record<string, unknown>;
   try {
     body = await req.json();

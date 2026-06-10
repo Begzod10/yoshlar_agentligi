@@ -9,17 +9,15 @@ import { Topbar } from "./topbar";
 
 interface MainLayoutProps {
   children: React.ReactNode;
-  currentPage: string;
-  onPageChange: (page: string) => void;
   onLogout: () => void;
 }
 
-export function MainLayout({ children, currentPage, onPageChange, onLogout }: MainLayoutProps) {
-  const { sidebarOpen } = useApp();
+export function MainLayout({ children, onLogout }: MainLayoutProps) {
+  const { currentPage, sidebarOpen } = useApp();
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar currentPage={currentPage} onPageChange={onPageChange} />
+      <Sidebar currentPage={currentPage} />
       <Topbar onLogout={onLogout} />
       <main
         className={cn(

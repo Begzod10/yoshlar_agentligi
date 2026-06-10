@@ -34,6 +34,7 @@ export interface User {
   role: UserRole;
   districtId: string | null;
   phone: string | null;
+  avatarUrl?: string | null;
   isActive: boolean;
   lastLoginAt: string | null;
   createdAt: string;
@@ -260,7 +261,139 @@ export interface DistrictStatsRead {
   graduatedYouth: number;
   removedYouth: number;
   totalPlans: number;
+  totalOrganizations?: number;
+  totalMasullar?: number;
   completedPlans?: number;
   totalMeetings: number;
   attendedMeetings?: number;
+}
+
+export type MonitoringPeriod = "week" | "month" | "quarter" | "year" | "all";
+
+export interface MonitoringOverview {
+  totalYouth: number;
+  totalDistricts: number;
+  avgBajarilishPct: number;
+  totalMasullar: number;
+}
+
+export interface MonitoringDistrict {
+  rank: number;
+  districtId: string;
+  totalYouth: number;
+  totalMasullar: number;
+  totalPlans: number;
+  totalMeetings: number;
+  bajarilishPct: number;
+  aiBall: number;
+  umumiyBall: number;
+}
+
+export interface MonitoringOrganization {
+  rank: number;
+  id: string;
+  name: string;
+  districtId: string;
+  totalMasullar: number;
+  totalYouth: number;
+  totalPlans: number;
+  bajarilishPct: number;
+  aiBall: number;
+}
+
+export interface MonitoringMasul {
+  rank: number;
+  id: string;
+  fullName: string;
+  districtId: string;
+  organizationId: string | null;
+  totalYouth: number;
+  totalPlans: number;
+  totalMeetings: number;
+  bajarilishPct: number;
+  aiBall: number;
+}
+
+export interface CategoryStats {
+  category: string;
+  totalYouth: number;
+}
+
+export interface TopYouthStats {
+  id: string;
+  fullName: string;
+  districtId: string;
+  organizationId: string | null;
+  masulId: string | null;
+  status: YouthStatus;
+  totalPlans: number;
+  completedPlans: number;
+  totalMeetings: number;
+  attendedMeetings: number;
+  aiScore: number;
+}
+
+export interface RecentActivity {
+  id: string;
+  userId: string;
+  role: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  createdAt: string;
+}
+
+export interface AiInsight {
+  type: "positive" | "warning" | "info";
+  text: string;
+}
+
+export interface ProfileRead extends User {}
+
+export interface ProfileUpdate {
+  fullName?: string;
+  email?: string;
+  phone?: string | null;
+  avatarUrl?: string | null;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface NotificationPreferences {
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  pushEnabled: boolean;
+  youthUpdates: boolean;
+  planReminders: boolean;
+  meetingReminders: boolean;
+  dailyReport: boolean;
+  weeklyReport: boolean;
+}
+
+export interface ProfilePreferences {
+  theme: "light" | "dark" | "system";
+  language: "uz" | "ru" | "en";
+  notifications: NotificationPreferences;
+}
+
+export interface ProfilePreferencesUpdate {
+  theme?: ProfilePreferences["theme"];
+  language?: ProfilePreferences["language"];
+}
+
+export interface ProfileSession {
+  id: string;
+  ip: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  lastActiveAt: string;
+  expiresAt: string;
+  isCurrent: boolean;
+}
+
+export interface RevokeSessionsResponse {
+  revoked: number;
 }

@@ -2,10 +2,9 @@
 
 import React from "react"
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
 import {
-  downloadAdminReport,
   useAdminAuditLog,
   useAdminBackups,
   useAdminSystemInfo,
@@ -14,6 +13,20 @@ import {
   useRestoreBackup,
   useToggleMaintenance,
 } from "@/lib/api/hooks/use-admin";
+import {
+  downloadReport,
+  useChangePassword,
+  useProfile,
+  useProfileNotifications,
+  useProfilePreferences,
+  useProfileSessions,
+  useRevokeOtherProfileSessions,
+  useRevokeProfileSession,
+  useUpdateProfile,
+  useUpdateProfileNotifications,
+  useUpdateProfilePreferences,
+} from "@/lib/api/hooks/use-core-api";
+import type { NotificationPreferences } from "@/lib/api/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,6 +61,8 @@ import {
   Monitor,
   Database,
   Download,
+  ChevronLeft,
+  ChevronRight,
   RotateCcw,
 } from "lucide-react";
 
@@ -62,19 +77,30 @@ const roleLabels = {
 export function SozlamalarPage() {
   const { currentUser, showToast } = useApp();
   const isAdmin = currentUser?.role === "admin";
-  const auditLog = useAdminAuditLog({ limit: 10, enabled: isAdmin });
+  const [auditPage, setAuditPage] = useState(1);
+  const auditLog = useAdminAuditLog({ page: auditPage, limit: 50, enabled: isAdmin });
   const systemInfo = useAdminSystemInfo(isAdmin);
   const tableCounts = useAdminTableCounts(isAdmin);
   const backups = useAdminBackups(isAdmin);
   const toggleMaintenance = useToggleMaintenance();
   const createBackup = useCreateBackup();
   const restoreBackup = useRestoreBackup();
+  const profile = useProfile();
+  const profilePreferences = useProfilePreferences();
+  const profileNotifications = useProfileNotifications();
+  const profileSessions = useProfileSessions();
+  const updateProfile = useUpdateProfile();
+  const changePassword = useChangePassword();
+  const updateProfilePreferences = useUpdateProfilePreferences();
+  const updateProfileNotifications = useUpdateProfileNotifications();
+  const revokeProfileSession = useRevokeProfileSession();
+  const revokeOtherProfileSessions = useRevokeOtherProfileSessions();
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
-  const [notifications, setNotifications] = useState({
-    email: true,
-    sms: false,
-    push: true,
+  const [notifications, setNotifications] = useState<NotificationPreferences>({
+    emailEnabled: true,
+    smsEnabled: false,
+    pushEnabled: true,
     dailyReport: true,
     weeklyReport: false,
     youthUpdates: true,
@@ -85,19 +111,105 @@ export function SozlamalarPage() {
   const [language, setLanguage] = useState("uz");
   const [maintenanceMessage, setMaintenanceMessage] = useState("");
   const [reportDistrict, setReportDistrict] = useState("Bekobod tumani");
+  const auditTotal = auditLog.data?.total ?? 0;
+  const auditLimit = auditLog.data?.limit ?? 50;
+  const currentAuditPage = auditLog.data?.page ?? auditPage;
+  const auditTotalPages = Math.max(1, Math.ceil(auditTotal / auditLimit));
+  const firstAuditRow = auditTotal === 0 ? 0 : (currentAuditPage - 1) * auditLimit + 1;
+  const lastAuditRow = Math.min(currentAuditPage * auditLimit, auditTotal);
+  const profileData = profile.data ?? currentUser;
 
-  const handleSaveProfile = (e: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    if (profilePreferences.data) {
+      setTheme(profilePreferences.data.theme);
+      setLanguage(profilePreferences.data.language);
+      setNotifications(profilePreferences.data.notifications);
+    }
+  }, [profilePreferences.data]);
+
+  useEffect(() => {
+    if (profileNotifications.data) {
+      setNotifications(profileNotifications.data);
+    }
+  }, [profileNotifications.data]);
+
+  const handleSaveProfile = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    showToast("Profil muvaffaqiyatli saqlandi", "success");
+    const form = new FormData(e.currentTarget);
+    try {
+      await updateProfile.mutateAsync({
+        fullName: String(form.get("fullName") ?? ""),
+        email: String(form.get("email") ?? ""),
+        phone: String(form.get("phone") || "") || null,
+      });
+      showToast("Profil muvaffaqiyatli saqlandi", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Profil saqlanmadi", "error");
+    }
   };
 
-  const handleChangePassword = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleChangePassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    showToast("Parol muvaffaqiyatli o'zgartirildi", "success");
+    const form = new FormData(e.currentTarget);
+    const currentPassword = String(form.get("currentPassword") ?? "");
+    const newPassword = String(form.get("newPassword") ?? "");
+    const confirmPassword = String(form.get("confirmPassword") ?? "");
+    if (newPassword !== confirmPassword) {
+      showToast("Yangi parollar mos kelmadi", "error");
+      return;
+    }
+    try {
+      await changePassword.mutateAsync({ currentPassword, newPassword });
+      e.currentTarget.reset();
+      showToast("Parol muvaffaqiyatli o'zgartirildi", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Parol o'zgartirilmadi", "error");
+    }
   };
 
-  const handleSaveNotifications = () => {
-    showToast("Bildirishnoma sozlamalari saqlandi", "success");
+  const handleSaveNotifications = async () => {
+    try {
+      await updateProfileNotifications.mutateAsync(notifications);
+      showToast("Bildirishnoma sozlamalari saqlandi", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Bildirishnomalar saqlanmadi", "error");
+    }
+  };
+
+  const handleThemeChange = async (nextTheme: "light" | "dark" | "system") => {
+    setTheme(nextTheme);
+    try {
+      await updateProfilePreferences.mutateAsync({ theme: nextTheme });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Mavzu saqlanmadi", "error");
+    }
+  };
+
+  const handleLanguageChange = async (nextLanguage: "uz" | "ru" | "en") => {
+    setLanguage(nextLanguage);
+    try {
+      await updateProfilePreferences.mutateAsync({ language: nextLanguage });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Til saqlanmadi", "error");
+    }
+  };
+
+  const handleRevokeSession = async (sessionId: string) => {
+    try {
+      await revokeProfileSession.mutateAsync(sessionId);
+      showToast("Sessiya tugatildi", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Sessiya tugatilmadi", "error");
+    }
+  };
+
+  const handleRevokeOtherSessions = async () => {
+    try {
+      const result = await revokeOtherProfileSessions.mutateAsync();
+      showToast(`${result.revoked} ta sessiya tugatildi`, "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Sessiyalar tugatilmadi", "error");
+    }
   };
 
   const formatDate = (date: string) =>
@@ -147,10 +259,11 @@ export function SozlamalarPage() {
 
   const handleDownloadReport = async (kind: "agency" | "district") => {
     try {
-      await downloadAdminReport(kind, {
-        districtId: kind === "district" ? reportDistrict : undefined,
-        includePii: true,
-      });
+      if (kind === "agency") {
+        await downloadReport.agency(false);
+      } else {
+        await downloadReport.district(reportDistrict, false);
+      }
       showToast("Hisobot yuklab olindi", "success");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Hisobot yuklanmadi", "error");
@@ -215,7 +328,7 @@ export function SozlamalarPage() {
               <form onSubmit={handleSaveProfile} className="space-y-6">
                 <div className="flex items-center gap-6">
                   <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-semibold">
-                    {currentUser?.fullName
+                    {profileData?.fullName
                       .split(" ")
                       .map((n) => n[0])
                       .join("")
@@ -238,7 +351,8 @@ export function SozlamalarPage() {
                     <Label htmlFor="fullName">To'liq ism</Label>
                     <Input
                       id="fullName"
-                      defaultValue={currentUser?.fullName}
+                      name="fullName"
+                      defaultValue={profileData?.fullName}
                       placeholder="F.I.O."
                     />
                   </div>
@@ -248,8 +362,9 @@ export function SozlamalarPage() {
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="email"
+                        name="email"
                         type="email"
-                        defaultValue={currentUser?.email}
+                        defaultValue={profileData?.email}
                         className="pl-9"
                       />
                     </div>
@@ -260,7 +375,9 @@ export function SozlamalarPage() {
                       <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="phone"
+                        name="phone"
                         type="tel"
+                        defaultValue={profileData?.phone ?? ""}
                         placeholder="+998 XX XXX XX XX"
                         className="pl-9"
                       />
@@ -270,19 +387,19 @@ export function SozlamalarPage() {
                     <Label>Rol</Label>
                     <div className="flex items-center h-10 px-3 rounded-md border bg-muted/50">
                       <Badge variant="secondary">
-                        {currentUser?.role ? roleLabels[currentUser.role as keyof typeof roleLabels] : "-"}
+                        {profileData?.role ? roleLabels[profileData.role as keyof typeof roleLabels] : "-"}
                       </Badge>
                     </div>
                   </div>
                 </div>
 
-                {currentUser?.districtId && (
+                {profileData?.districtId && (
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Tuman</Label>
                       <div className="flex items-center h-10 px-3 rounded-md border bg-muted/50 gap-2">
                         <MapPin className="h-4 w-4 text-muted-foreground" />
-                        <span>{currentUser.districtId}</span>
+                        <span>{profileData.districtId}</span>
                       </div>
                     </div>
                     {currentUser?.organizationName && (
@@ -298,7 +415,7 @@ export function SozlamalarPage() {
                 )}
 
                 <div className="flex justify-end">
-                  <Button type="submit">
+                  <Button type="submit" disabled={updateProfile.isPending}>
                     <Save className="mr-2 h-4 w-4" />
                     Saqlash
                   </Button>
@@ -326,9 +443,9 @@ export function SozlamalarPage() {
                   </p>
                 </div>
                 <Switch
-                  checked={notifications.email}
+                  checked={notifications.emailEnabled}
                   onCheckedChange={(checked) =>
-                    setNotifications({ ...notifications, email: checked })
+                    setNotifications({ ...notifications, emailEnabled: checked })
                   }
                 />
               </div>
@@ -341,9 +458,9 @@ export function SozlamalarPage() {
                   </p>
                 </div>
                 <Switch
-                  checked={notifications.sms}
+                  checked={notifications.smsEnabled}
                   onCheckedChange={(checked) =>
-                    setNotifications({ ...notifications, sms: checked })
+                    setNotifications({ ...notifications, smsEnabled: checked })
                   }
                 />
               </div>
@@ -356,9 +473,9 @@ export function SozlamalarPage() {
                   </p>
                 </div>
                 <Switch
-                  checked={notifications.push}
+                  checked={notifications.pushEnabled}
                   onCheckedChange={(checked) =>
-                    setNotifications({ ...notifications, push: checked })
+                    setNotifications({ ...notifications, pushEnabled: checked })
                   }
                 />
               </div>
@@ -449,7 +566,7 @@ export function SozlamalarPage() {
               </div>
 
               <div className="flex justify-end">
-                <Button onClick={handleSaveNotifications}>
+                <Button onClick={handleSaveNotifications} disabled={updateProfileNotifications.isPending}>
                   <Save className="mr-2 h-4 w-4" />
                   Saqlash
                 </Button>
@@ -475,6 +592,7 @@ export function SozlamalarPage() {
                     <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="currentPassword"
+                      name="currentPassword"
                       type={showPassword ? "text" : "password"}
                       className="pl-9 pr-10"
                       placeholder="Joriy parolni kiriting"
@@ -500,6 +618,7 @@ export function SozlamalarPage() {
                     <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="newPassword"
+                      name="newPassword"
                       type={showNewPassword ? "text" : "password"}
                       className="pl-9 pr-10"
                       placeholder="Yangi parolni kiriting"
@@ -525,6 +644,7 @@ export function SozlamalarPage() {
                     <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="confirmPassword"
+                      name="confirmPassword"
                       type={showNewPassword ? "text" : "password"}
                       className="pl-9"
                       placeholder="Yangi parolni qayta kiriting"
@@ -532,7 +652,7 @@ export function SozlamalarPage() {
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <Button type="submit">
+                  <Button type="submit" disabled={changePassword.isPending}>
                     <Shield className="mr-2 h-4 w-4" />
                     Parolni o'zgartirish
                   </Button>
@@ -549,21 +669,56 @@ export function SozlamalarPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
-                    <Monitor className="h-5 w-5 text-accent" />
+              {profileSessions.isLoading && (
+                <p className="text-sm text-muted-foreground">Sessiyalar yuklanmoqda...</p>
+              )}
+              {profileSessions.isError && (
+                <p className="text-sm text-destructive">Sessiyalar yuklanmadi</p>
+              )}
+              {profileSessions.data?.map((session) => (
+                <div
+                  key={session.id}
+                  className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 md:flex-row md:items-center md:justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+                      <Monitor className="h-5 w-5 text-accent" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{session.ip ?? "Noma'lum IP"}</p>
+                      <p className="line-clamp-1 text-sm text-muted-foreground">
+                        {session.userAgent ?? "Noma'lum qurilma"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Oxirgi faollik: {formatDate(session.lastActiveAt)}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium">Joriy qurilma</p>
-                    <p className="text-sm text-muted-foreground">
-                      Toshkent, O'zbekiston - Chrome, Windows
-                    </p>
-                  </div>
+                  {session.isCurrent ? (
+                    <Badge className="w-fit bg-accent/10 text-accent">Faol</Badge>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-fit bg-transparent"
+                      disabled={revokeProfileSession.isPending}
+                      onClick={() => void handleRevokeSession(session.id)}
+                    >
+                      Tugatish
+                    </Button>
+                  )}
                 </div>
-                <Badge className="bg-accent/10 text-accent">Faol</Badge>
-              </div>
-              <Button variant="outline" className="w-full bg-transparent">
+              ))}
+              {profileSessions.data?.length === 0 && (
+                <p className="text-sm text-muted-foreground">Faol sessiyalar topilmadi</p>
+              )}
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                disabled={revokeOtherProfileSessions.isPending}
+                onClick={() => void handleRevokeOtherSessions()}
+              >
                 Barcha boshqa sessiyalarni tugatish
               </Button>
             </CardContent>
@@ -587,7 +742,7 @@ export function SozlamalarPage() {
                     type="button"
                     variant={theme === "light" ? "default" : "outline"}
                     className="h-auto flex-col gap-2 py-4"
-                    onClick={() => setTheme("light")}
+                    onClick={() => void handleThemeChange("light")}
                   >
                     <Sun className="h-5 w-5" />
                     <span>Yorug'</span>
@@ -596,7 +751,7 @@ export function SozlamalarPage() {
                     type="button"
                     variant={theme === "dark" ? "default" : "outline"}
                     className="h-auto flex-col gap-2 py-4"
-                    onClick={() => setTheme("dark")}
+                    onClick={() => void handleThemeChange("dark")}
                   >
                     <Moon className="h-5 w-5" />
                     <span>Qorong'u</span>
@@ -605,7 +760,7 @@ export function SozlamalarPage() {
                     type="button"
                     variant={theme === "system" ? "default" : "outline"}
                     className="h-auto flex-col gap-2 py-4"
-                    onClick={() => setTheme("system")}
+                    onClick={() => void handleThemeChange("system")}
                   >
                     <Monitor className="h-5 w-5" />
                     <span>Tizim</span>
@@ -617,7 +772,7 @@ export function SozlamalarPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="language">Til</Label>
-                <Select value={language} onValueChange={setLanguage}>
+                <Select value={language} onValueChange={(value) => void handleLanguageChange(value as "uz" | "ru" | "en")}>
                   <SelectTrigger className="w-full md:w-[200px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -670,6 +825,40 @@ export function SozlamalarPage() {
                   ))}
                   {auditLog.data?.data.length === 0 && (
                     <p className="text-sm text-muted-foreground">Audit yozuvlari topilmadi</p>
+                  )}
+                  {auditTotal > auditLimit && (
+                    <div className="flex flex-col gap-3 border-t pt-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                      <span>
+                        {firstAuditRow}-{lastAuditRow} / {auditTotal} ta
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 bg-transparent"
+                          disabled={currentAuditPage <= 1}
+                          onClick={() => setAuditPage((current) => Math.max(1, current - 1))}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Oldingi
+                        </Button>
+                        <span className="min-w-16 text-center">
+                          {currentAuditPage}/{auditTotalPages}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 bg-transparent"
+                          disabled={currentAuditPage >= auditTotalPages}
+                          onClick={() => setAuditPage((current) => current + 1)}
+                        >
+                          Keyingi
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
                   )}
                 </div>
               </CardContent>
@@ -732,7 +921,7 @@ export function SozlamalarPage() {
                   <div className="rounded-md border p-4">
                     <p className="font-medium">Admin reports</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      PII-enabled CSV eksportlar
+                      CSV eksportlar
                     </p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <Button

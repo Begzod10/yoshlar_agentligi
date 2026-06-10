@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type React from "react";
 import { z } from "zod";
 import { useApp } from "@/lib/app-context";
@@ -20,7 +20,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { DistrictSelector } from "@/components/ui/district-selector";
 import {
   Dialog,
@@ -40,11 +39,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -72,6 +66,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Copy,
+  ChevronLeft,
+  ChevronRight,
   Edit,
   Eye,
   EyeOff,
@@ -166,9 +162,9 @@ export function FoydalanuvchilarPage() {
   const sessionUser = useCurrentUser();
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
+  const [selectedRole, setSelectedRole] = useState<UserRole | "all">("all");
   const [districtFilter, setDistrictFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -180,10 +176,11 @@ export function FoydalanuvchilarPage() {
   const [editRole, setEditRole] = useState<UserRole>("admin");
 
   const usersQuery = useAdminUsers({
-    role: selectedRoles.length === 1 ? selectedRoles[0] : undefined,
+    role: selectedRole === "all" ? undefined : selectedRole,
     districtId: districtFilter === "all" ? undefined : districtFilter,
     search: searchQuery.trim() || undefined,
-    limit: 100,
+    page,
+    limit: 50,
   });
   const createUser = useCreateAdminUser();
   const updateUser = useUpdateAdminUser();
@@ -198,23 +195,13 @@ export function FoydalanuvchilarPage() {
     deleteUser.isPending ||
     resetUserPassword.isPending;
 
-  const filteredUsers = useMemo(() => {
-    return users.filter((user) => {
-      const normalizedQuery = searchQuery.trim().toLowerCase();
-      const matchesSearch =
-        !normalizedQuery ||
-        user.fullName.toLowerCase().includes(normalizedQuery) ||
-        user.email.toLowerCase().includes(normalizedQuery);
-      const matchesRole =
-        selectedRoles.length === 0 || selectedRoles.includes(user.role);
-      const matchesDistrict =
-        districtFilter === "all" || user.districtId === districtFilter;
-      const matchesStatus =
-        statusFilter === "all" || userStatus(user) === statusFilter;
-
-      return matchesSearch && matchesRole && matchesDistrict && matchesStatus;
-    });
-  }, [districtFilter, searchQuery, selectedRoles, statusFilter, users]);
+  const filteredUsers = users;
+  const totalUsers = usersQuery.data?.total ?? 0;
+  const userLimit = usersQuery.data?.limit ?? 50;
+  const userPage = usersQuery.data?.page ?? page;
+  const userTotalPages = Math.max(1, Math.ceil(totalUsers / userLimit));
+  const firstUser = totalUsers === 0 ? 0 : (userPage - 1) * userLimit + 1;
+  const lastUser = Math.min(userPage * userLimit, totalUsers);
 
   const stats = {
     total: usersQuery.data?.total ?? users.length,
@@ -223,20 +210,9 @@ export function FoydalanuvchilarPage() {
     scoped: users.filter((user) => scopedRoles.includes(user.role)).length,
   };
 
-  const roleFilterLabel =
-    selectedRoles.length === 0
-      ? "Barcha rollar"
-      : selectedRoles.length === 1
-        ? roleLabels[selectedRoles[0]]
-        : `${selectedRoles.length} ta rol`;
-
-  const toggleRole = (role: UserRole) => {
-    setSelectedRoles((current) =>
-      current.includes(role)
-        ? current.filter((item) => item !== role)
-        : [...current, role]
-    );
-  };
+  useEffect(() => {
+    setPage(1);
+  }, [districtFilter, searchQuery, selectedRole]);
 
   const readForm = (form: HTMLFormElement, requirePassword: boolean) => {
     const formData = new FormData(form);
@@ -472,7 +448,7 @@ export function FoydalanuvchilarPage() {
 
       <Card>
         <CardContent className="pt-6">
-          <div className="grid gap-4 lg:grid-cols-[1fr_220px_220px_180px]">
+          <div className="grid gap-4 lg:grid-cols-[1fr_220px_220px]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -482,50 +458,25 @@ export function FoydalanuvchilarPage() {
                 className="pl-9"
               />
             </div>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="justify-between bg-transparent">
-                  {roleFilterLabel}
-                  <Badge variant="secondary">{selectedRoles.length || "all"}</Badge>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-64 space-y-3">
+            <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as UserRole | "all")}>
+              <SelectTrigger>
+                <SelectValue placeholder="Rol" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Barcha rollar</SelectItem>
                 {allRoles.map((role) => (
-                  <label key={role} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={selectedRoles.includes(role)}
-                      onCheckedChange={() => toggleRole(role)}
-                    />
-                    <span>{roleLabels[role]}</span>
-                  </label>
+                  <SelectItem key={role} value={role}>
+                    {roleLabels[role]}
+                  </SelectItem>
                 ))}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => setSelectedRoles([])}
-                >
-                  Tozalash
-                </Button>
-              </PopoverContent>
-            </Popover>
+              </SelectContent>
+            </Select>
             <DistrictSelector
               value={districtFilter as ToshkentDistrict | "all"}
               onValueChange={(value) => setDistrictFilter(value)}
               className="w-full"
               placeholder="Tuman"
             />
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Holat" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Barcha holatlar</SelectItem>
-                <SelectItem value="active">Faol</SelectItem>
-                <SelectItem value="inactive">Nofaol</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </CardContent>
       </Card>
@@ -672,6 +623,40 @@ export function FoydalanuvchilarPage() {
               )}
             </TableBody>
           </Table>
+          {totalUsers > userLimit && (
+            <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                {firstUser}-{lastUser} / {totalUsers} ta
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 bg-transparent"
+                  disabled={userPage <= 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Oldingi
+                </Button>
+                <span className="min-w-16 text-center">
+                  {userPage}/{userTotalPages}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 bg-transparent"
+                  disabled={userPage >= userTotalPages}
+                  onClick={() => setPage((current) => current + 1)}
+                >
+                  Keyingi
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

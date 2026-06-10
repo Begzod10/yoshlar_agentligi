@@ -153,7 +153,7 @@ function apiUserToAppUser(user: ApiUser): User {
     };
 }
 
-function organizationToApp(org: OrganizationRead): Organization {
+export function organizationToApp(org: OrganizationRead): Organization {
     return {
         id: org.id,
         name: org.name,
@@ -167,7 +167,7 @@ function organizationToApp(org: OrganizationRead): Organization {
     };
 }
 
-function masulToApp(masul: MasulRead, organizations: Organization[]): Masul {
+export function masulToApp(masul: MasulRead, organizations: Organization[]): Masul {
     const organization = organizations.find((org) => org.id === masul.organizationId);
     return {
         id: masul.id,
@@ -185,7 +185,7 @@ function masulToApp(masul: MasulRead, organizations: Organization[]): Masul {
     };
 }
 
-function youthToApp(youth: YouthRead, masullar: Masul[], organizations: Organization[]): Youth {
+export function youthToApp(youth: YouthRead, masullar: Masul[], organizations: Organization[]): Youth {
     const masul = masullar.find((item) => item.id === youth.masulId);
     const organization = organizations.find((item) => item.id === youth.organizationId);
     return {
@@ -212,7 +212,7 @@ function youthToApp(youth: YouthRead, masullar: Masul[], organizations: Organiza
     };
 }
 
-function planToApp(plan: PlanRead, youth: Youth[], masullar: Masul[]): IndividualPlan {
+export function planToApp(plan: PlanRead, youth: Youth[], masullar: Masul[]): IndividualPlan {
     const planYouth = youth.find((item) => item.id === plan.youthId);
     const masul = masullar.find((item) => item.id === plan.masulId);
     return {
@@ -231,7 +231,7 @@ function planToApp(plan: PlanRead, youth: Youth[], masullar: Masul[]): Individua
     };
 }
 
-function meetingToApp(meeting: MeetingRead, youth: Youth[], masullar: Masul[]): Meeting {
+export function meetingToApp(meeting: MeetingRead, youth: Youth[], masullar: Masul[]): Meeting {
     const meetingYouth = youth.find((item) => item.id === meeting.youthId);
     const masul = masullar.find((item) => item.id === meeting.masulId);
     return {
@@ -245,7 +245,7 @@ function meetingToApp(meeting: MeetingRead, youth: Youth[], masullar: Masul[]): 
         date: meeting.scheduledAt.slice(0, 10),
         time: meeting.scheduledAt.slice(11, 16),
         location: meeting.location ?? "",
-        type: meeting.type,
+        type: meeting.type ?? "",
         status: meeting.attendanceStatus === "attended" ? "completed" : "scheduled",
         notes: meeting.attendanceNotes ?? undefined,
         photos: [],

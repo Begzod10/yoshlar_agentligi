@@ -61,6 +61,7 @@ export interface Youth {
   districtId: ToshkentDistrict; // Required district
   phone: string;
   category: string;
+  notes?: string;
   status: "active" | "inactive" | "graduated" | "removed";
   assignedMasulId?: string;
   assignedMasulName?: string;
@@ -72,7 +73,7 @@ export interface Youth {
   createdAt: string;
   removalReason?: string;
   removalDate?: string;
-  notes?: string
+
 }
 
 export interface Masul {
@@ -117,7 +118,7 @@ export interface Meeting {
   date: string;
   time?: string;
   location: string;
-  type?: "individual" | "group" | "home_visit" | "online" | string | null | undefined;
+  type?: "individual" | "group" | "home_visit" | "online" | string ;
   status: "scheduled" | "completed" | "cancelled";
 
   notes?: string;

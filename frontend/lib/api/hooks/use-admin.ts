@@ -85,7 +85,7 @@ export function useAdminAuditLog(params: AuditLogParams = {}) {
           from: params.from,
           to: params.to,
           page: params.page ?? 1,
-          limit: params.limit ?? 20,
+          limit: params.limit ?? 50,
         },
       }),
     retry: false,
@@ -148,7 +148,7 @@ export function useRestoreBackup() {
 
   return useMutation({
     mutationFn: (backupId: string) =>
-      api.post<void>(`/api/admin/backups/${backupId}/restore`),
+      api.post<void>(`/api/admin/backups/${backupId}/restore?confirm=true`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin"] });
     },

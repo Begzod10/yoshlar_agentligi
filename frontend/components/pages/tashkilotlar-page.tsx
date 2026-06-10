@@ -2,8 +2,11 @@
 
 import React from "react"
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { downloadReport } from "@/lib/api/hooks/use-core-api";
+import { usePageDataContext } from "@/lib/page-data-context";
+import { ResourcePagination } from "@/components/app/resource-pagination";
 import { useOrganizations } from "@/lib/api/hooks/use-core-api";
 import type { Organization, ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
@@ -26,6 +29,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -84,6 +97,23 @@ export function TashkilotlarPage() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<Organization | null>(null);
+  const pageData = usePageDataContext();
+  const effectiveDistrict =
+    isTashkilotDirektor && currentUser?.districtId
+      ? currentUser.districtId
+      : districtFilter !== "all"
+        ? districtFilter
+        : selectedDistrict !== "all"
+          ? selectedDistrict
+          : undefined;
+
+  useEffect(() => {
+    pageData?.setResourceParams("organizations", {
+      districtId: effectiveDistrict,
+      search: searchQuery.trim() || undefined,
+    });
+  }, [effectiveDistrict, pageData, searchQuery]);
 
   // Filter organizations based on role and selection
   let filteredOrganizations = organizations.filter((org) => {
@@ -98,13 +128,10 @@ export function TashkilotlarPage() {
     // // Local district filter
     // if (districtFilter !== "all" && org.districtId !== districtFilter) return false;
 
-    // Search filter
-    const matchesSearch =
-      org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      org.directorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      org.address.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredOrganizations = organizations;
 
-    return matchesSearch;
+
+    // return matchesSearch;
   });
     console.log(organizations, 'user')
 
@@ -112,7 +139,14 @@ export function TashkilotlarPage() {
   const availableDistricts = isTashkilotDirektor && currentUser?.districtId
     ? [currentUser.districtId]
     : TOSHKENT_VILOYATI_DISTRICTS;
-
+  const handleExport = () => {
+    void downloadReport
+        .organizations(effectiveDistrict)
+        .then(() => showToast("Export yuklab olindi", "success"))
+        .catch((error) =>
+            showToast(error instanceof Error ? error.message : "Export yuklanmadi", "error")
+        );
+  };
   // Statistics
   const totalOrganizations = filteredOrganizations.length;
   const totalMasullar = filteredOrganizations.reduce((sum, org) => sum + org.masullarCount, 0);
@@ -161,11 +195,10 @@ export function TashkilotlarPage() {
     showToast("Tashkilot muvaffaqiyatli tahrirlandi", "success");
   };
 
-  const handleDeleteOrganization = (org: Organization) => {
-    if (confirm(`"${org.name}" tashkilotini o'chirishni tasdiqlaysizmi?`)) {
-      deleteOrganization(org.id);
-      showToast("Tashkilot o'chirildi", "success");
-    }
+  const handleDeleteOrganization = () => {
+    if (!deleteCandidate) return;
+    deleteOrganization(deleteCandidate.id);
+    setDeleteCandidate(null);
   };
 
   return (
@@ -230,7 +263,7 @@ export function TashkilotlarPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Tashkilot nomi yoki direktor bo'yicha qidirish..."
+                placeholder="Tashkilot nomi bo'yicha qidirish..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -251,7 +284,7 @@ export function TashkilotlarPage() {
                 </SelectContent>
               </Select>
             )}
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleExport}>
               <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
@@ -340,7 +373,7 @@ export function TashkilotlarPage() {
                           {isAdmin && (
                             <DropdownMenuItem
                               className="text-destructive"
-                              onClick={() => handleDeleteOrganization(org)}
+                              onClick={() => setDeleteCandidate(org)}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               O'chirish
@@ -354,6 +387,7 @@ export function TashkilotlarPage() {
               )}
             </TableBody>
           </Table>
+          <ResourcePagination resource="organizations" />
         </CardContent>
       </Card>
 
@@ -519,6 +553,32 @@ export function TashkilotlarPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(deleteCandidate)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteCandidate(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tashkilotni o'chirish</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteCandidate ? `"${deleteCandidate.name}" tashkilotini o'chirishni tasdiqlaysizmi?` : ""}
+              Bu amalni ortga qaytarib bo'lmaydi.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Bekor qilish</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteOrganization}
+            >
+              O'chirish
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

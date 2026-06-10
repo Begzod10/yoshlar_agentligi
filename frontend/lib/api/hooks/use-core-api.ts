@@ -4,7 +4,10 @@ import { getAccessToken } from "@/lib/auth/storage";
 import { api } from "@/lib/api/client";
 import type {
   AgencyStats,
+  AiInsight,
   AttendanceUpdate,
+  CategoryStats,
+  ChangePasswordRequest,
   DistrictStatsRead,
   FlagCreate,
   FlagRead,
@@ -15,6 +18,11 @@ import type {
   MeetingCreate,
   MeetingRead,
   MeetingUpdate,
+  MonitoringDistrict,
+  MonitoringMasul,
+  MonitoringOrganization,
+  MonitoringOverview,
+  MonitoringPeriod,
   OrganizationCreate,
   OrganizationRead,
   OrganizationUpdate,
@@ -23,8 +31,17 @@ import type {
   PlanCreate,
   PlanRead,
   PlanUpdate,
+  ProfilePreferences,
+  ProfilePreferencesUpdate,
+  ProfileRead,
+  ProfileSession,
+  ProfileUpdate,
   ProposeRemoval,
+  RecentActivity,
+  RevokeSessionsResponse,
   RejectRemoval,
+  NotificationPreferences,
+  TopYouthStats,
   YouthCreate,
   YouthRead,
   YouthStatus,
@@ -50,6 +67,12 @@ type EntityListParams = ListParams & {
   raisedBy?: string;
 };
 
+type DateRangeParams = {
+  from?: string;
+  to?: string;
+  enabled?: boolean;
+};
+
 function invalidate(qc: ReturnType<typeof useQueryClient>, keys: string[]) {
   keys.forEach((key) => void qc.invalidateQueries({ queryKey: [key] }));
 }
@@ -62,12 +85,26 @@ function csvUrl(path: string, query?: Record<string, string | number | boolean |
   return url.toString();
 }
 
-async function downloadCsv(path: string, filename: string, query?: Record<string, string | number | boolean | undefined | null>) {
+async function csvError(res: Response): Promise<Error> {
+  const payload = await res.json().catch(() => null);
+  const message =
+    payload?.error?.message ??
+    payload?.detail ??
+    payload?.message ??
+    res.statusText ??
+    "CSV yuklab bo'lmadi";
+  return new Error(message);
+}
+
+async function fetchCsv(path: string, query?: Record<string, string | number | boolean | undefined | null>) {
   const token = getAccessToken();
-  const res = await fetch(csvUrl(path, query), {
+  return fetch(csvUrl(path, query), {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
-  if (!res.ok) throw new Error(res.statusText || "CSV yuklab bo'lmadi");
+}
+
+async function saveCsvResponse(res: Response, filename: string) {
+  if (!res.ok) throw await csvError(res);
 
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
@@ -77,7 +114,28 @@ async function downloadCsv(path: string, filename: string, query?: Record<string
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function downloadCsv(path: string, filename: string, query?: Record<string, string | number | boolean | undefined | null>) {
+  await saveCsvResponse(await fetchCsv(path, query), filename);
+}
+
+async function downloadCsvWithFallback(
+  path: string,
+  filename: string,
+  query: Record<string, string | number | boolean | undefined | null> | undefined,
+  fallback: {
+    path: string;
+    query?: Record<string, string | number | boolean | undefined | null>;
+  }
+) {
+  const res = await fetchCsv(path, query);
+  if (res.status !== 404) {
+    await saveCsvResponse(res, filename);
+    return;
+  }
+  await saveCsvResponse(await fetchCsv(fallback.path, fallback.query), filename);
 }
 
 export function useOrganizations(params: EntityListParams = {}) {
@@ -91,7 +149,7 @@ export function useOrganizations(params: EntityListParams = {}) {
           district_id: params.districtId,
           search: params.search,
           page: params.page,
-          limit: params.limit ?? 200,
+          limit: params.limit ?? 50,
         },
       }),
   });
@@ -143,7 +201,7 @@ export function useMasullar(params: EntityListParams = {}) {
           organization_id: params.organizationId,
           search: params.search,
           page: params.page,
-          limit: params.limit ?? 200,
+          limit: params.limit ?? 50,
         },
       }),
   });
@@ -187,7 +245,7 @@ export function useYouthList(params: EntityListParams = {}) {
           status: params.status,
           search: params.search,
           page: params.page,
-          limit: params.limit ?? 200,
+          limit: params.limit ?? 50,
         },
       }),
   });
@@ -247,7 +305,7 @@ export function usePlans(params: EntityListParams = {}) {
           youth_id: params.youthId,
           status: params.status,
           page: params.page,
-          limit: params.limit ?? 200,
+          limit: params.limit ?? 50,
         },
       }),
   });
@@ -290,7 +348,7 @@ export function useMeetings(params: EntityListParams = {}) {
           from: params.from,
           to: params.to,
           page: params.page,
-          limit: params.limit ?? 200,
+          limit: params.limit ?? 50,
         },
       }),
   });
@@ -376,7 +434,7 @@ export function useFlags(params: EntityListParams = {}) {
           entity_type: params.entityType,
           raised_by: params.raisedBy,
           page: params.page,
-          limit: params.limit ?? 200,
+          limit: params.limit ?? 50,
         },
       }),
   });
@@ -407,6 +465,18 @@ export function useAgencyStats(enabled = true) {
   });
 }
 
+export function useAgencyStatsRange(params: DateRangeParams = {}) {
+  const { enabled = true } = params;
+  return useQuery({
+    queryKey: ["stats", "agency", params],
+    enabled,
+    queryFn: () =>
+      api.get<AgencyStats>("/api/stats/agency", {
+        query: { from: params.from, to: params.to },
+      }),
+  });
+}
+
 export function useDistrictsStats(enabled = true) {
   return useQuery({
     queryKey: ["stats", "districts"],
@@ -431,9 +501,185 @@ export function useCompareDistricts(a?: string, b?: string) {
   });
 }
 
+export function useCategoryStats(enabled = true) {
+  return useQuery({
+    queryKey: ["stats", "categories"],
+    enabled,
+    queryFn: () => api.get<CategoryStats[]>("/api/stats/categories"),
+  });
+}
+
+export function useTopYoshlar(limit = 10, enabled = true) {
+  return useQuery({
+    queryKey: ["stats", "top-yoshlar", limit],
+    enabled,
+    queryFn: () => api.get<TopYouthStats[]>("/api/stats/top-yoshlar", { query: { limit } }),
+  });
+}
+
+export function useRecentActivity(limit = 20, enabled = true) {
+  return useQuery({
+    queryKey: ["stats", "recent-activity", limit],
+    enabled,
+    queryFn: () => api.get<RecentActivity[]>("/api/stats/recent-activity", { query: { limit } }),
+  });
+}
+
+export function useAiInsights(enabled = true) {
+  return useQuery({
+    queryKey: ["stats", "ai-insights"],
+    enabled,
+    queryFn: () => api.get<AiInsight[]>("/api/stats/ai-insights"),
+  });
+}
+
+export function useMonitoringOverview(period: MonitoringPeriod = "month", enabled = true) {
+  return useQuery({
+    queryKey: ["monitoring", "overview", period],
+    enabled,
+    queryFn: () => api.get<MonitoringOverview>("/api/monitoring/overview", { query: { period } }),
+  });
+}
+
+export function useMonitoringDistricts(period: MonitoringPeriod = "month", enabled = true) {
+  return useQuery({
+    queryKey: ["monitoring", "districts", period],
+    enabled,
+    queryFn: () => api.get<MonitoringDistrict[]>("/api/monitoring/districts", { query: { period } }),
+  });
+}
+
+export function useMonitoringOrganizations(period: MonitoringPeriod = "month", enabled = true) {
+  return useQuery({
+    queryKey: ["monitoring", "organizations", period],
+    enabled,
+    queryFn: () => api.get<MonitoringOrganization[]>("/api/monitoring/organizations", { query: { period } }),
+  });
+}
+
+export function useMonitoringMasullar(period: MonitoringPeriod = "month", enabled = true) {
+  return useQuery({
+    queryKey: ["monitoring", "masullar", period],
+    enabled,
+    queryFn: () => api.get<MonitoringMasul[]>("/api/monitoring/masullar", { query: { period } }),
+  });
+}
+
+export function useProfile() {
+  return useQuery({
+    queryKey: ["profile"],
+    queryFn: () => api.get<ProfileRead>("/api/profile"),
+  });
+}
+
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ProfileUpdate) => api.patch<ProfileRead>("/api/profile", body),
+    onSuccess: (profile) => {
+      qc.setQueryData(["profile"], profile);
+      qc.setQueryData(["session", "me"], profile);
+    },
+  });
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (body: ChangePasswordRequest) =>
+      api.post<void>("/api/profile/change-password", body),
+  });
+}
+
+export function useProfilePreferences() {
+  return useQuery({
+    queryKey: ["profile", "preferences"],
+    queryFn: () => api.get<ProfilePreferences>("/api/profile/preferences"),
+  });
+}
+
+export function useUpdateProfilePreferences() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ProfilePreferencesUpdate) =>
+      api.put<ProfilePreferences>("/api/profile/preferences", body),
+    onSuccess: (preferences) => {
+      qc.setQueryData(["profile", "preferences"], preferences);
+      qc.setQueryData(["profile", "notifications"], preferences.notifications);
+    },
+  });
+}
+
+export function useProfileNotifications() {
+  return useQuery({
+    queryKey: ["profile", "notifications"],
+    queryFn: () => api.get<NotificationPreferences>("/api/profile/notifications"),
+  });
+}
+
+export function useUpdateProfileNotifications() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: NotificationPreferences) =>
+      api.put<NotificationPreferences>("/api/profile/notifications", body),
+    onSuccess: (notifications) => {
+      qc.setQueryData(["profile", "notifications"], notifications);
+      qc.setQueryData<ProfilePreferences | undefined>(["profile", "preferences"], (current) =>
+        current ? { ...current, notifications } : current
+      );
+    },
+  });
+}
+
+export function useProfileSessions() {
+  return useQuery({
+    queryKey: ["profile", "sessions"],
+    queryFn: () => api.get<ProfileSession[]>("/api/profile/sessions"),
+  });
+}
+
+export function useRevokeProfileSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: string) => api.delete<void>(`/api/profile/sessions/${sessionId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile", "sessions"] });
+    },
+  });
+}
+
+export function useRevokeOtherProfileSessions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<RevokeSessionsResponse>("/api/profile/sessions"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile", "sessions"] });
+    },
+  });
+}
+
 export const downloadReport = {
-  agency: (includePii = false) =>
-    downloadCsv("/api/reports/agency.csv", "agency-report.csv", { include_pii: includePii }),
+  agency: (includePii = false, query?: { from?: string; to?: string }) =>
+    downloadCsv("/api/reports/agency.csv", "agency-report.csv", {
+      from: query?.from,
+      to: query?.to,
+      include_pii: includePii,
+    }),
   district: (districtId: string, includePii = false) =>
-    downloadCsv(`/api/reports/district/${districtId}.csv`, `${districtId}-report.csv`, { include_pii: includePii }),
+    downloadCsvWithFallback(
+      `/api/reports/district/${encodeURIComponent(districtId)}.csv`,
+      `${districtId}-report.csv`,
+      { include_pii: includePii },
+      {
+        path: "/api/reports/agency.csv",
+        query: { district_id: districtId, include_pii: includePii },
+      }
+    ),
+  organizations: (districtId?: string) =>
+    downloadCsv("/api/reports/organizations.csv", "organizations-report.csv", { district_id: districtId }),
+  masullar: (districtId?: string) =>
+    downloadCsv("/api/reports/masullar.csv", "masullar-report.csv", { district_id: districtId }),
+  plans: (districtId?: string, includePii = false) =>
+    downloadCsv("/api/reports/plans.csv", "plans-report.csv", { district_id: districtId, include_pii: includePii }),
+  meetings: (districtId?: string, includePii = false) =>
+    downloadCsv("/api/reports/meetings.csv", "meetings-report.csv", { district_id: districtId, include_pii: includePii }),
 };

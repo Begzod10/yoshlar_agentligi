@@ -76,9 +76,11 @@ export function AIYouthAnalysis({
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [planRecommendation, setPlanRecommendation] =
     useState<PlanRecommendation | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchAnalysis = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const response = await fetch(`${config.apiUrl}/api/ai/analyze`, {
         method: "POST",
@@ -89,9 +91,12 @@ export function AIYouthAnalysis({
         }),
       });
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "AI tahlil bajarilmadi");
+      }
       setAnalysis(data.analysis);
     } catch (error) {
-      console.error("Analysis error:", error);
+      setError(error instanceof Error ? error.message : "AI tahlil bajarilmadi");
     } finally {
       setIsLoading(false);
     }
@@ -99,6 +104,7 @@ export function AIYouthAnalysis({
 
   const fetchPlanRecommendation = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const response = await fetch("/api/ai/analyze", {
         method: "POST",
@@ -109,9 +115,12 @@ export function AIYouthAnalysis({
         }),
       });
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Reja tavsiyasi bajarilmadi");
+      }
       setPlanRecommendation(data.plan);
     } catch (error) {
-      console.error("Plan recommendation error:", error);
+      setError(error instanceof Error ? error.message : "Reja tavsiyasi bajarilmadi");
     } finally {
       setIsLoading(false);
     }
@@ -340,8 +349,12 @@ export function AIYouthAnalysis({
                 </div>
               </>
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                Tahlil yuklanmadi
+              <div className="flex flex-col items-center justify-center gap-3 py-12 text-center text-muted-foreground">
+                {error && <AlertTriangle className="h-8 w-8 text-destructive" />}
+                <p>{error || "Tahlil yuklanmadi"}</p>
+                <Button onClick={fetchAnalysis} variant="outline" size="sm">
+                  Qayta urinish
+                </Button>
               </div>
             )}
           </TabsContent>
@@ -482,8 +495,12 @@ export function AIYouthAnalysis({
                 </div>
               </>
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                Reja tavsiyasi yuklanmadi
+              <div className="flex flex-col items-center justify-center gap-3 py-12 text-center text-muted-foreground">
+                {error && <AlertTriangle className="h-8 w-8 text-destructive" />}
+                <p>{error || "Reja tavsiyasi yuklanmadi"}</p>
+                <Button onClick={fetchPlanRecommendation} variant="outline" size="sm">
+                  Qayta urinish
+                </Button>
               </div>
             )}
           </TabsContent>
