@@ -18,6 +18,12 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DistrictBadge } from "@/components/ui/district-selector";
 import {
+  Tooltip as UiTooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Table,
   TableBody,
   TableCell,
@@ -111,12 +117,14 @@ export function MonitoringPage() {
         completedPlans: Math.round((d.totalPlans * d.bajarilishPct) / 100),
         completionRate: d.bajarilishPct,
         averageAiScore: d.aiBall,
+        aiComment: d.aiComment ?? null,
         overallScore: Math.round(d.umumiyBall),
         rank: d.rank,
       }))
     : fallbackDistrictStats
         .map((d) => ({
           ...d,
+          aiComment: null,
           overallScore: Math.round(
             d.completionRate * 0.4 +
               d.averageAiScore * 0.3 +
@@ -137,6 +145,7 @@ export function MonitoringPage() {
         masullarCount: org.totalMasullar,
         yoshlarCount: org.totalYouth,
         score: Math.round(org.aiBall),
+        aiComment: org.aiComment ?? null,
         completionRate: Math.round(org.bajarilishPct),
         rank: org.rank,
       }))
@@ -150,6 +159,7 @@ export function MonitoringPage() {
             masullarCount: org.masullarCount,
             yoshlarCount: org.yoshlarCount,
             score: stats ? Math.round(stats.averageAiScore) : 70,
+            aiComment: null,
             completionRate: stats ? Math.round(stats.completionRate) : 60,
           };
         })
@@ -169,6 +179,7 @@ export function MonitoringPage() {
         completedPlansCount: Math.round((masul.totalPlans * masul.bajarilishPct) / 100),
         meetingsCount: masul.totalMeetings,
         aiScore: Math.round(masul.aiBall),
+        aiComment: masul.aiComment ?? null,
         rank: masul.rank,
       }))
     : masullar.sort((a, b) => b.aiScore - a.aiScore)
@@ -494,17 +505,28 @@ export function MonitoringPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        <span
-                          className={`font-medium ${
-                            district.averageAiScore >= 80
-                              ? "text-accent"
-                              : district.averageAiScore >= 60
-                                ? "text-chart-3"
-                                : "text-orange-500"
-                          }`}
-                        >
-                          {Math.round(district.averageAiScore)}%
-                        </span>
+                        <TooltipProvider>
+                          <UiTooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                className={`font-medium cursor-help underline decoration-dotted ${
+                                  district.averageAiScore >= 80
+                                    ? "text-accent"
+                                    : district.averageAiScore >= 60
+                                      ? "text-chart-3"
+                                      : "text-orange-500"
+                                }`}
+                              >
+                                {Math.round(district.averageAiScore)}%
+                              </span>
+                            </TooltipTrigger>
+                            {district.aiComment && (
+                              <TooltipContent className="max-w-xs text-sm">
+                                {district.aiComment}
+                              </TooltipContent>
+                            )}
+                          </UiTooltip>
+                        </TooltipProvider>
                       </TableCell>
                       <TableCell className="text-center">
                         <span className="text-lg font-bold text-primary">{district.overallScore}</span>
@@ -626,17 +648,28 @@ export function MonitoringPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        <span
-                          className={`font-bold ${
-                            org.score >= 80
-                              ? "text-accent"
-                              : org.score >= 70
-                                ? "text-chart-3"
-                                : "text-orange-500"
-                          }`}
-                        >
-                          {org.score}
-                        </span>
+                        <TooltipProvider>
+                          <UiTooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                className={`font-bold cursor-help underline decoration-dotted ${
+                                  org.score >= 80
+                                    ? "text-accent"
+                                    : org.score >= 70
+                                      ? "text-chart-3"
+                                      : "text-orange-500"
+                                }`}
+                              >
+                                {org.score}
+                              </span>
+                            </TooltipTrigger>
+                            {org.aiComment && (
+                              <TooltipContent className="max-w-xs text-sm">
+                                {org.aiComment}
+                              </TooltipContent>
+                            )}
+                          </UiTooltip>
+                        </TooltipProvider>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -683,8 +716,21 @@ export function MonitoringPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-3xl font-bold text-primary">{masul.aiScore}</p>
-                      <p className="text-xs text-muted-foreground">AI ball</p>
+                      <TooltipProvider>
+                        <UiTooltip>
+                          <TooltipTrigger asChild>
+                            <div className="cursor-help">
+                              <p className="text-3xl font-bold text-primary">{masul.aiScore}</p>
+                              <p className="text-xs text-muted-foreground">AI ball</p>
+                            </div>
+                          </TooltipTrigger>
+                          {masul.aiComment && (
+                            <TooltipContent className="max-w-xs text-sm">
+                              {masul.aiComment}
+                            </TooltipContent>
+                          )}
+                        </UiTooltip>
+                      </TooltipProvider>
                     </div>
                   </div>
                 </CardContent>
@@ -731,20 +777,31 @@ export function MonitoringPage() {
                       <TableCell className="text-center">{masul.completedPlansCount}</TableCell>
                       <TableCell className="text-center">{masul.meetingsCount}</TableCell>
                       <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <span
-                            className={`font-bold ${
-                              masul.aiScore >= 80
-                                ? "text-accent"
-                                : masul.aiScore >= 70
-                                  ? "text-chart-3"
-                                  : "text-orange-500"
-                            }`}
-                          >
-                            {masul.aiScore}%
-                          </span>
-                          <Progress value={masul.aiScore} className="w-16 h-2" />
-                        </div>
+                        <TooltipProvider>
+                          <UiTooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center justify-center gap-2 cursor-help">
+                                <span
+                                  className={`font-bold ${
+                                    masul.aiScore >= 80
+                                      ? "text-accent"
+                                      : masul.aiScore >= 70
+                                        ? "text-chart-3"
+                                        : "text-orange-500"
+                                  }`}
+                                >
+                                  {masul.aiScore}%
+                                </span>
+                                <Progress value={masul.aiScore} className="w-16 h-2" />
+                              </div>
+                            </TooltipTrigger>
+                            {masul.aiComment && (
+                              <TooltipContent className="max-w-xs text-sm">
+                                {masul.aiComment}
+                              </TooltipContent>
+                            )}
+                          </UiTooltip>
+                        </TooltipProvider>
                       </TableCell>
                     </TableRow>
                   ))}
