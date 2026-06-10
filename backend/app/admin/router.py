@@ -13,7 +13,6 @@ Each subfolder maps to a category from docs/roles/admin.md:
 from fastapi import APIRouter
 
 from app.admin.audit.router import router as audit_router
-from app.admin.backups.router import router as backups_router
 from app.admin.reports.router import router as reports_router
 from app.admin.system.router import router as system_router
 from app.admin.users.router import router as users_router
@@ -25,4 +24,3 @@ router.include_router(audit_router)
 router.include_router(system_router)
 router.include_router(youth_router)
 router.include_router(reports_router)
-router.include_router(backups_router)
