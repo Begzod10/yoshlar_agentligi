@@ -23,7 +23,6 @@ import {
   UserCheck,
   FileText,
   Calendar,
-  TrendingUp,
   Award,
   Target,
   BarChart3,
@@ -44,6 +43,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { AIInsights } from "@/components/ai/ai-insights";
+import { MonthlyTrendChart } from "@/components/dashboard/monthly-trend-chart";
 import {
   BarChart,
   Bar,
@@ -55,8 +55,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
   Legend,
 } from "recharts";
 
@@ -624,15 +622,6 @@ export function DashboardPage() {
     { name: "Yakunlangan", value: totalStats.graduatedYouth, color: "var(--chart-1)" },
   ];
 
-  // Monthly trend data
-  const monthlyData = [
-    { month: "Yan", yoshlar: 45, rejalar: 32, uchrashuvlar: 78 },
-    { month: "Fev", yoshlar: 52, rejalar: 38, uchrashuvlar: 92 },
-    { month: "Mar", yoshlar: 61, rejalar: 45, uchrashuvlar: 105 },
-    { month: "Apr", yoshlar: 58, rejalar: 42, uchrashuvlar: 98 },
-    { month: "May", yoshlar: 72, rejalar: 56, uchrashuvlar: 124 },
-    { month: "Iyn", yoshlar: 68, rejalar: 52, uchrashuvlar: 118 },
-  ];
   const recentActivities = recentActivityQuery.data ?? [];
 
   const getDashboardTitle = () => {
@@ -699,7 +688,7 @@ export function DashboardPage() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => setCurrentPage("yoshlar")}
@@ -1013,58 +1002,7 @@ export function DashboardPage() {
 
         {/* Monthly Trend - Admin/Director/OrgDirector */}
         {(isAdmin || isDirektor || isTashkilotDirektor) && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-medium flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Oylik dinamika
-              </CardTitle>
-              <CardDescription>Yoshlar, rejalar va uchrashuvlar soni</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={monthlyData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="month" tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
-                    <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "var(--card)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="yoshlar"
-                      name="Yoshlar"
-                      stroke="var(--primary)"
-                      strokeWidth={2}
-                      dot={{ r: 4 }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="rejalar"
-                      name="Rejalar"
-                      stroke="var(--accent)"
-                      strokeWidth={2}
-                      dot={{ r: 4 }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="uchrashuvlar"
-                      name="Uchrashuvlar"
-                      stroke="var(--chart-3)"
-                      strokeWidth={2}
-                      dot={{ r: 4 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+          <MonthlyTrendChart />
         )}
       </div>
 

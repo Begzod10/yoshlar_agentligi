@@ -13,19 +13,27 @@ interface MainLayoutProps {
 }
 
 export function MainLayout({ children, onLogout }: MainLayoutProps) {
-  const { currentPage, sidebarOpen } = useApp();
+  const { currentPage, sidebarOpen, setSidebarOpen } = useApp();
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       <Sidebar currentPage={currentPage} />
       <Topbar onLogout={onLogout} />
       <main
         className={cn(
           "pt-16 min-h-screen transition-all duration-300",
-          sidebarOpen ? "pl-64" : "pl-16"
+          "pl-0",
+          sidebarOpen ? "lg:pl-64" : "lg:pl-16"
         )}
       >
-        <div className="p-6">{children}</div>
+        <div className="p-4 lg:p-6">{children}</div>
       </main>
     </div>
   );

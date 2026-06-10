@@ -3,7 +3,7 @@
 set -e
 
 echo "=== Running Alembic Database Migrations ==="
-alembic upgrade head
+alembic upgrade heads
 
 echo "=== Running User Seed Script ==="
 python -m scripts.seed_users

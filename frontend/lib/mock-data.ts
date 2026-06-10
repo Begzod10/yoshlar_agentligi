@@ -284,7 +284,6 @@ export const mockYouth: Youth[] = [
     meetingsCount: 8,
     createdAt: "2024-03-01",
     notes: "Kompyuter kursiga qatnashmoqda. Davomati yaxshi.",
-    contact: "+998901234567",
   },
   {
     id: "y2",
@@ -304,7 +303,6 @@ export const mockYouth: Youth[] = [
     meetingsCount: 12,
     createdAt: "2024-03-05",
     notes: "DTM ga tayyorlanmoqda. Matematikadan qo'shimcha dars zarur.",
-    contact: "+998901234568",
   },
   // Chinoz tumani
   {

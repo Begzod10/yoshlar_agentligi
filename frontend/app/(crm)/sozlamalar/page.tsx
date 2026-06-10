@@ -1,5 +1,5 @@
-import { SozlamalarPage } from "@/components/pages/sozlamalar-page";
+import { RoleSozlamalarPage } from "@/components/pages/role-routes/sozlamalar-page";
 
 export default function SozlamalarRoute() {
-  return <SozlamalarPage />;
+  return <RoleSozlamalarPage />;
 }

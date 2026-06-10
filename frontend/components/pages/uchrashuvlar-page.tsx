@@ -62,6 +62,8 @@ import {
   Phone,
 } from "lucide-react";
 
+type MeetingType = NonNullable<Meeting["type"]>;
+
 export function UchrashuvlarPage() {
   const {
     currentUser,
@@ -101,7 +103,7 @@ export function UchrashuvlarPage() {
   const [formDate, setFormDate] = useState("");
   const [formTime, setFormTime] = useState("");
   const [formLocation, setFormLocation] = useState("");
-  const [formType, setFormType] = useState<Meeting["type"]>("individual");
+  const [formType, setFormType] = useState<MeetingType>("individual");
   const [formAgenda, setFormAgenda] = useState("");
 
   // View modal
@@ -313,7 +315,7 @@ export function UchrashuvlarPage() {
 
   const weekDays = getWeekDays();
   const dayLabels = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"];
-
+  console.log(allVisibleMeetings)
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -698,7 +700,7 @@ export function UchrashuvlarPage() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="meeting-type">Uchrashuv turi</Label>
-              <Select value={formType} onValueChange={(v) => setFormType(v as Meeting["type"])}>
+              <Select value={formType} onValueChange={(v) => setFormType(v as MeetingType)}>
                 <SelectTrigger id="meeting-type">
                   <SelectValue placeholder="Turni tanlang" />
                 </SelectTrigger>

@@ -35,6 +35,9 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    backups_dir: str = "backups"
+    media_dir: str = "media"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, v: object) -> object:

@@ -71,26 +71,27 @@ export interface DistrictRead {
 }
 
 // Backend returns snake_case; client.ts auto-converts to camelCase.
-// director_name → directorName, contact_phone → contactPhone, etc.
+// head_name → headName, contact_phone → contactPhone, etc.
 export interface OrganizationRead {
   id: string;
   name: string;
   districtId: string;
   type: string | null;
   contactPhone: string | null;
+  directorName: string
   address: string | null;
-  directorName: string;
+  headName: string | null;
   createdAt: string;
-  updatedAt: string;
 }
 
-export type OrganizationCreate = Pick<OrganizationRead, "name" | "districtId" | "directorName"> &
+export type OrganizationCreate = Pick<OrganizationRead, "name" | "districtId"> &
+  Partial<Pick<OrganizationRead, "headName">> &
   Partial<Pick<OrganizationRead, "type" | "contactPhone" | "address">>;
 
 export type OrganizationUpdate = Partial<Omit<OrganizationCreate, "districtId">>;
 
 export interface MasulRead {
-    email: string;
+  email: string;
   id: string;
   fullName: string;
   districtId: string;
@@ -100,10 +101,15 @@ export interface MasulRead {
   createdAt: string;
 }
 
-export type MasulCreate = Pick<MasulRead, "fullName" | "districtId"> &
-  Partial<Pick<MasulRead, "organizationId" | "phone" | "position">>;
+export type MasulCreate = Pick<MasulRead, "fullName" | "districtId"> & {
+  password: string;
+} & Partial<Pick<MasulRead, "organizationId" | "phone" | "email" | "position">>;
 
-export type MasulUpdate = Partial<Omit<MasulCreate, "districtId">>;
+export type MasulUpdate = Partial<Omit<MasulCreate, "districtId" | "password">>;
+
+export interface MasulPasswordReset {
+  newPassword: string;
+}
 
 export type YouthStatus = "active" | "graduated" | "removed";
 
@@ -112,8 +118,10 @@ export interface YouthRead {
   fullName: string;
   districtId: string;
   masulId: string | null;
+  masulName: string | null;
   organizationId: string | null;
   status: YouthStatus;
+  category: string | null;
   contact: string | null;
   dateOfBirth: string | null;
   address: string | null;
@@ -123,7 +131,12 @@ export interface YouthRead {
 }
 
 export type YouthCreate = Pick<YouthRead, "fullName" | "districtId"> &
-  Partial<Pick<YouthRead, "masulId" | "organizationId" | "contact" | "dateOfBirth" | "address" | "notes">>;
+  Partial<
+    Pick<
+      YouthRead,
+      "masulId" | "organizationId" | "category" | "contact" | "dateOfBirth" | "address" | "notes"
+    >
+  >;
 
 export type YouthUpdate = Partial<Omit<YouthCreate, "districtId">>;
 
@@ -140,6 +153,7 @@ export interface PlanRead {
   id: string;
   youthId: string;
   masulId: string | null;
+  masulName: string | null;
   title: string;
   goal: string | null;
   milestones: Record<string, unknown>[];
@@ -152,6 +166,7 @@ export interface PlanRead {
 
 export interface PlanCreate {
   youthId: string;
+  masulId?: string | null;
   title: string;
   goal?: string | null;
   milestones?: Milestone[];
@@ -166,23 +181,33 @@ export type PlanUpdate = Partial<Omit<PlanCreate, "youthId"> & {
 
 export type MeetingAttendance = "scheduled" | "attended" | "no_show" | "rescheduled";
 
+export interface MeetingAttachment {
+  path: string;
+  size: number;
+  filename: string;
+  content_type: string;
+}
+
 export interface MeetingRead {
   id: string;
   youthId: string;
   masulId: string | null;
+  masulName: string | null;
   scheduledAt: string;
   type: string | null;
   location: string | null;
   agenda: string | null;
   attendanceStatus: MeetingAttendance;
   attendanceNotes: string | null;
-  attachments: Record<string, unknown>[];
+  attachments: MeetingAttachment[];
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface MeetingCreate {
   youthId: string;
   scheduledAt: string;
+  masulId?: string | null;
   type?: string | null;
   location?: string | null;
   agenda?: string | null;

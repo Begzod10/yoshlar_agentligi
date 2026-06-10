@@ -1,13 +1,13 @@
 "use client";
 
-import {useState} from "react";
-import {useApp} from "@/lib/app-context";
+import { useState } from "react";
+import { useApp } from "@/lib/app-context";
 import {
-    downloadReport, useAgencyStats, useDistrictsStats,
-    useMonitoringDistricts,
-    useMonitoringMasullar,
-    useMonitoringOrganizations,
-    useMonitoringOverview,
+  downloadReport,
+  useMonitoringDistricts,
+  useMonitoringMasullar,
+  useMonitoringOrganizations,
+  useMonitoringOverview,
 } from "@/lib/api/hooks/use-core-api";
 import type { MonitoringPeriod } from "@/lib/api/types";
 import { TOSHKENT_VILOYATI_DISTRICTS, type ToshkentDistrict } from "@/lib/types";
@@ -18,61 +18,56 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DistrictBadge } from "@/components/ui/district-selector";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-    PieChart,
-    Pie,
-    Cell,
-    RadarChart,
-    Radar,
-    PolarGrid,
-    PolarAngleAxis,
-    PolarRadiusAxis,
-    LineChart,
-    Line,
-    Legend,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  LineChart,
+  Line,
+  Legend,
 } from "recharts";
 import {
-    Download,
-    BarChart3,
-    Building2,
-    UserCheck,
-    MapPin,
-    Award,
-    TrendingUp,
-    Trophy,
-    Medal,
-    Users,
-    Target,
-    Activity,
+  Download,
+  BarChart3,
+  Building2,
+  UserCheck,
+  MapPin,
+  Award,
+  TrendingUp,
+  Trophy,
+  Medal,
+  Users,
+  Target,
+  Activity,
 } from "lucide-react";
 
 const COLORS = [
-    "hsl(var(--chart-1))",
-    "hsl(var(--chart-2))",
-    "hsl(var(--chart-3))",
-    "hsl(var(--chart-4))",
-    "hsl(var(--chart-5))",
   "var(--chart-1)",
   "var(--chart-2)",
   "var(--chart-3)",
@@ -81,23 +76,16 @@ const COLORS = [
 ];
 
 export function MonitoringPage() {
-    const {
-        currentUser,
-        selectedDistrict,
-        setSelectedDistrict,
-        getDistrictStats,
-        getVisibleOrganizations,
-        getVisibleMasullar,
-        canViewAllDistricts,
+  const {
+    selectedDistrict,
+    getDistrictStats,
+    getVisibleOrganizations,
+    getVisibleMasullar,
     showToast,
   } = useApp();
 
-    // Fire GET /api/stats/agency and /api/stats/districts on mount
-    useAgencyStats();
-    useDistrictsStats();
-
-    const [activeTab, setActiveTab] = useState("tumanlar");
-    const [periodFilter, setPeriodFilter] = useState("month");
+  const [activeTab, setActiveTab] = useState("tumanlar");
+  const [periodFilter, setPeriodFilter] = useState<MonitoringPeriod>("month");
 
   const overviewQuery = useMonitoringOverview(periodFilter);
   const monitoringDistrictsQuery = useMonitoringDistricts(periodFilter);
@@ -111,7 +99,6 @@ export function MonitoringPage() {
   const apiOrganizations = monitoringOrganizationsQuery.data ?? [];
   const apiMasullar = monitoringMasullarQuery.data ?? [];
   const districtFilter = selectedDistrict === "all" ? null : selectedDistrict;
-    const districtStats = getDistrictStats();
 
   // District rankings with scores
   const districtRankings = (apiDistricts.length > 0
@@ -192,13 +179,13 @@ export function MonitoringPage() {
       rank: index + 1,
     }));
 
-    // Bar chart data for district comparison
-    const districtBarData = districtRankings.slice(0, 10).map((d) => ({
-        name: d.districtId.replace(" tumani", "").slice(0, 10),
-        yoshlar: d.totalYouth,
-        bajarildi: d.completedPlans,
-        masullar: d.totalMasullar,
-    }));
+  // Bar chart data for district comparison
+  const districtBarData = districtRankings.slice(0, 10).map((d) => ({
+    name: d.districtId.replace(" tumani", "").slice(0, 10),
+    yoshlar: d.totalYouth,
+    bajarildi: d.completedPlans,
+    masullar: d.totalMasullar,
+  }));
 
   // Pie chart data for overall distribution
   const pieData = [
@@ -232,37 +219,37 @@ export function MonitoringPage() {
     },
   ];
 
-    // Monthly trend data
-    const trendData = [
-        {month: "Yan", yoshlar: 45, rejalar: 32, score: 72},
-        {month: "Fev", yoshlar: 52, rejalar: 38, score: 74},
-        {month: "Mar", yoshlar: 61, rejalar: 45, score: 76},
-        {month: "Apr", yoshlar: 58, rejalar: 42, score: 75},
-        {month: "May", yoshlar: 72, rejalar: 56, score: 78},
-        {month: "Iyn", yoshlar: 68, rejalar: 52, score: 80},
-    ];
+  // Monthly trend data
+  const trendData = [
+    { month: "Yan", yoshlar: 45, rejalar: 32, score: 72 },
+    { month: "Fev", yoshlar: 52, rejalar: 38, score: 74 },
+    { month: "Mar", yoshlar: 61, rejalar: 45, score: 76 },
+    { month: "Apr", yoshlar: 58, rejalar: 42, score: 75 },
+    { month: "May", yoshlar: 72, rejalar: 56, score: 78 },
+    { month: "Iyn", yoshlar: 68, rejalar: 52, score: 80 },
+  ];
 
-    const getRankBadge = (rank: number) => {
-        if (rank === 1)
-            return (
-                <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300">
-                    <Trophy className="h-3 w-3 mr-1"/> 1-o'rin
-                </Badge>
-            );
-        if (rank === 2)
-            return (
-                <Badge className="bg-gray-100 text-gray-800 border border-gray-300">
-                    <Medal className="h-3 w-3 mr-1"/> 2-o'rin
-                </Badge>
-            );
-        if (rank === 3)
-            return (
-                <Badge className="bg-amber-100 text-amber-800 border border-amber-300">
-                    <Medal className="h-3 w-3 mr-1"/> 3-o'rin
-                </Badge>
-            );
-        return <span className="text-muted-foreground">{rank}-o'rin</span>;
-    };
+  const getRankBadge = (rank: number) => {
+    if (rank === 1)
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300">
+          <Trophy className="h-3 w-3 mr-1" /> 1-o'rin
+        </Badge>
+      );
+    if (rank === 2)
+      return (
+        <Badge className="bg-gray-100 text-gray-800 border border-gray-300">
+          <Medal className="h-3 w-3 mr-1" /> 2-o'rin
+        </Badge>
+      );
+    if (rank === 3)
+      return (
+        <Badge className="bg-amber-100 text-amber-800 border border-amber-300">
+          <Medal className="h-3 w-3 mr-1" /> 3-o'rin
+        </Badge>
+      );
+    return <span className="text-muted-foreground">{rank}-o'rin</span>;
+  };
 
   const totalYouth = overviewQuery.data?.totalYouth ?? districtRankings.reduce((acc, d) => acc + d.totalYouth, 0);
   const totalMasullar = overviewQuery.data?.totalMasullar ?? districtRankings.reduce((acc, d) => acc + d.totalMasullar, 0);
@@ -271,7 +258,6 @@ export function MonitoringPage() {
     overviewQuery.data?.avgBajarilishPct ??
       (radarSource.reduce((acc, d) => acc + d.completionRate, 0) / radarCount)
   );
-
 
   return (
     <div className="space-y-6">
@@ -378,22 +364,22 @@ export function MonitoringPage() {
         </Card>
       </div>
 
-            {/* Tabs */}
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-3 max-w-lg">
-                    <TabsTrigger value="tumanlar" className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4"/>
-                        Tumanlar
-                    </TabsTrigger>
-                    <TabsTrigger value="tashkilotlar" className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4"/>
-                        Tashkilotlar
-                    </TabsTrigger>
-                    <TabsTrigger value="masullar" className="flex items-center gap-2">
-                        <UserCheck className="h-4 w-4"/>
-                        Mas'ullar
-                    </TabsTrigger>
-                </TabsList>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3 max-w-lg">
+          <TabsTrigger value="tumanlar" className="flex items-center gap-2">
+            <MapPin className="h-4 w-4" />
+            Tumanlar
+          </TabsTrigger>
+          <TabsTrigger value="tashkilotlar" className="flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            Tashkilotlar
+          </TabsTrigger>
+          <TabsTrigger value="masullar" className="flex items-center gap-2">
+            <UserCheck className="h-4 w-4" />
+            Mas'ullar
+          </TabsTrigger>
+        </TabsList>
 
         {/* Districts Tab */}
         <TabsContent value="tumanlar" className="space-y-6 mt-6">
@@ -509,65 +495,64 @@ export function MonitoringPage() {
                       </TableCell>
                       <TableCell className="text-center">
                         <span
-                            className={`font-medium ${
-                                district.averageAiScore >= 80
-                                    ? "text-accent"
-                                    : district.averageAiScore >= 60
-                                        ? "text-chart-3"
-                                        : "text-orange-500"
-                            }`}
+                          className={`font-medium ${
+                            district.averageAiScore >= 80
+                              ? "text-accent"
+                              : district.averageAiScore >= 60
+                                ? "text-chart-3"
+                                : "text-orange-500"
+                          }`}
                         >
                           {Math.round(district.averageAiScore)}%
                         </span>
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                                <span
-                                                    className="text-lg font-bold text-primary">{district.overallScore}</span>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="text-lg font-bold text-primary">{district.overallScore}</span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-                {/* Organizations Tab */}
-                <TabsContent value="tashkilotlar" className="space-y-6 mt-6">
-                    <div className="grid gap-6 lg:grid-cols-2">
-                        {/* Pie Chart */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base font-medium flex items-center gap-2">
-                                    <Users className="h-4 w-4"/>
-                                    Yoshlar holati
-                                </CardTitle>
-                                <CardDescription>Faol va yakunlangan</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="h-64 flex items-center justify-center">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie
-                                                data={pieData}
-                                                cx="50%"
-                                                cy="50%"
-                                                innerRadius={60}
-                                                outerRadius={90}
-                                                paddingAngle={5}
-                                                dataKey="value"
-                                                label={({name, percent}) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                                            >
-                                                {pieData.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]}/>
-                                                ))}
-                                            </Pie>
-                                            <Tooltip/>
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </CardContent>
-                        </Card>
+        {/* Organizations Tab */}
+        <TabsContent value="tashkilotlar" className="space-y-6 mt-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Pie Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-medium flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Yoshlar holati
+                </CardTitle>
+                <CardDescription>Faol va yakunlangan</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64 flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={90}
+                        paddingAngle={5}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Trend Chart */}
             <Card>
@@ -642,24 +627,24 @@ export function MonitoringPage() {
                       </TableCell>
                       <TableCell className="text-center">
                         <span
-                            className={`font-bold ${
-                                org.score >= 80
-                                    ? "text-accent"
-                                    : org.score >= 70
-                                        ? "text-chart-3"
-                                        : "text-orange-500"
-                            }`}
+                          className={`font-bold ${
+                            org.score >= 80
+                              ? "text-accent"
+                              : org.score >= 70
+                                ? "text-chart-3"
+                                : "text-orange-500"
+                          }`}
                         >
                           {org.score}
                         </span>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Masullar Tab */}
         <TabsContent value="masullar" className="space-y-6 mt-6">
@@ -748,27 +733,27 @@ export function MonitoringPage() {
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
                           <span
-                              className={`font-bold ${
-                                  masul.aiScore >= 80
-                                      ? "text-accent"
-                                      : masul.aiScore >= 70
-                                          ? "text-chart-3"
-                                          : "text-orange-500"
-                              }`}
+                            className={`font-bold ${
+                              masul.aiScore >= 80
+                                ? "text-accent"
+                                : masul.aiScore >= 70
+                                  ? "text-chart-3"
+                                  : "text-orange-500"
+                            }`}
                           >
                             {masul.aiScore}%
                           </span>
-                                                    <Progress value={masul.aiScore} className="w-16 h-2"/>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-            </Tabs>
-        </div>
-    );
+                          <Progress value={masul.aiScore} className="w-16 h-2" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 }

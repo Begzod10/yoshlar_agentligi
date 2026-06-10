@@ -613,7 +613,7 @@ export function YoshlarPage() {
                               Biriktirish
                             </DropdownMenuItem>
                           )}
-                          {canEdit && youth.status === "active" && (
+                          {!isMasul && !isTashkilotDirektor && canEdit && youth.status === "active" && (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem

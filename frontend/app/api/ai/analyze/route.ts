@@ -22,46 +22,42 @@ const youthAnalysisSchema = z.object({
 const planRecommendationSchema = z.object({
   title: z.string().describe("Reja nomi"),
   description: z.string().describe("Reja tavsifi"),
-  activities: z.array(
-    z.object({
-      name: z.string().describe("Faoliyat nomi"),
-      frequency: z.string().describe("Takrorlanish davriyligi"),
-      responsible: z.string().describe("Mas'ul shaxs turi"),
-      duration: z.string().describe("Davomiyligi"),
-    })
-  ).describe("Tavsiya etilgan faoliyatlar"),
-  milestones: z.array(
-    z.object({
-      week: z.number().describe("Hafta raqami"),
-      target: z.string().describe("Maqsad"),
-    })
-  ).describe("Bosqichlar"),
+  activities: z
+    .array(
+      z.object({
+        name: z.string().describe("Faoliyat nomi"),
+        frequency: z.string().describe("Takrorlanish davriyligi"),
+        responsible: z.string().describe("Mas'ul shaxs turi"),
+        duration: z.string().describe("Davomiyligi"),
+      })
+    )
+    .describe("Tavsiya etilgan faoliyatlar"),
+  milestones: z
+    .array(
+      z.object({
+        week: z.number().describe("Hafta raqami"),
+        target: z.string().describe("Maqsad"),
+      })
+    )
+    .describe("Bosqichlar"),
   expectedOutcomes: z.array(z.string()).describe("Kutilayotgan natijalar"),
 });
 
-// ─── Ownership guard ─────────────────────────────────────────────────────────
-// Verifies that the caller (userId) is the assigned masul for the youth.
-// For non-masul roles (admin / direktor) we skip the check (userId not sent).
-function checkYouthOwnership(youthId: string, userId?: string): {
-  youth: (typeof mockYouth)[0] | null;
-  forbidden: boolean;
-} {
-  const youth = mockYouth.find((y) => y.id === youthId) ?? null;
+function checkYouthOwnership(
+  youthId: string,
+  userId?: string
+): { youth: (typeof mockYouth)[0] | null; forbidden: boolean } {
+  const youth = mockYouth.find((item) => item.id === youthId) ?? null;
   if (!youth) return { youth: null, forbidden: false };
-  if (!userId) return { youth, forbidden: false }; // admin / direktor — no check
-  const forbidden = youth.assignedMasulId !== userId;
-  return { youth, forbidden };
+  if (!userId) return { youth, forbidden: false };
+  return { youth, forbidden: youth.assignedMasulId !== userId };
 }
 
 export async function POST(req: Request) {
   if (!isAiConfigured()) {
-    return Response.json(
-      { error: "AI_GATEWAY_API_KEY sozlanmagan" },
-      { status: 503 }
-    );
+    return Response.json({ error: "AI_GATEWAY_API_KEY sozlanmagan" }, { status: 503 });
   }
 
-  const { type, data } = await req.json();
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -76,12 +72,12 @@ export async function POST(req: Request) {
     userId?: string;
   };
 
-  // ─── Youth Analysis ────────────────────────────────────────────────────────
   if (type === "youth-analysis") {
-    const targetYouthId = (youthId ?? (data as any)?.youth?.id) as string | undefined;
+    const clientData = (data ?? {}) as any;
+    const targetYouthId = (youthId ?? clientData?.youth?.id) as string | undefined;
 
     if (targetYouthId) {
-      const { youth: serverYouth, forbidden } = checkYouthOwnership(targetYouthId, userId);
+      const { forbidden } = checkYouthOwnership(targetYouthId, userId);
       if (forbidden) {
         return Response.json(
           { error: "forbidden", message: "Bu yosh sizga biriktirilmagan" },
@@ -90,11 +86,13 @@ export async function POST(req: Request) {
       }
     }
 
-    // Use server-side youth data (not client-passed PII)
-    const clientData = (data ?? {}) as any;
     const meetings = clientData.meetings ?? [];
     const plans = clientData.plans ?? [];
-    const youth = mockYouth.find((y) => y.id === targetYouthId) ?? clientData.youth;
+    const youth = mockYouth.find((item) => item.id === targetYouthId) ?? clientData.youth;
+
+    if (!youth) {
+      return Response.json({ error: "Yosh topilmadi" }, { status: 404 });
+    }
 
     try {
       const { output } = await generateText({
@@ -131,22 +129,22 @@ Iltimos, yoshning holatini batafsil tahlil qiling va tavsiyalar bering.`,
           { status: 502 }
         );
       }
+
       return Response.json({ analysis: parsed.data });
-    } catch (err: any) {
-      console.error("[AI analyze] youth-analysis error:", err);
-      return Response.json({ error: "ai_error", message: err.message }, { status: 502 });
+    } catch (error: any) {
+      console.error("[AI analyze] youth-analysis error:", error);
+      return Response.json({ error: "ai_error", message: error.message }, { status: 502 });
     }
   }
 
-  // ─── Plan Recommendation ───────────────────────────────────────────────────
   if (type === "plan-recommendation") {
-    const targetYouthId = (youthId ?? (data as any)?.youth?.id) as string | undefined;
+    const clientData = (data ?? {}) as any;
+    const targetYouthId = (youthId ?? clientData?.youth?.id) as string | undefined;
 
     if (!targetYouthId) {
       return Response.json({ error: "youthId majburiy" }, { status: 400 });
     }
 
-    // Ownership check — masul_hodim sends userId
     const { youth: serverYouth, forbidden } = checkYouthOwnership(targetYouthId, userId);
     if (forbidden) {
       return Response.json(
@@ -155,13 +153,12 @@ Iltimos, yoshning holatini batafsil tahlil qiling va tavsiyalar bering.`,
       );
     }
 
-    // Load from server; ignore client PII
-    const youth = serverYouth ?? (data as any)?.youth;
+    const youth = serverYouth ?? clientData.youth;
     if (!youth) {
       return Response.json({ error: "Yosh topilmadi" }, { status: 404 });
     }
 
-    const existingPlans = ((data as any)?.existingPlans ?? []) as any[];
+    const existingPlans = clientData.existingPlans ?? [];
 
     try {
       const { output } = await generateText({
@@ -202,10 +199,11 @@ Iltimos, 3 oylik individual reja tavsiya qiling.`,
           { status: 502 }
         );
       }
+
       return Response.json({ plan: parsed.data });
-    } catch (err: any) {
-      console.error("[AI analyze] plan-recommendation error:", err);
-      return Response.json({ error: "ai_error", message: err.message }, { status: 502 });
+    } catch (error: any) {
+      console.error("[AI analyze] plan-recommendation error:", error);
+      return Response.json({ error: "ai_error", message: error.message }, { status: 502 });
     }
   }
 

@@ -246,7 +246,7 @@ export function meetingToApp(meeting: MeetingRead, youth: Youth[], masullar: Mas
         time: meeting.scheduledAt.slice(11, 16),
         location: meeting.location ?? "",
         type: meeting.type ?? "",
-        status: meeting.attendanceStatus === "attended" ? "completed" : "scheduled",
+        status: meeting.attendanceStatus === "attended" ? "completed" : meeting.attendanceStatus === "no_show" ? "cancelled" : "scheduled",
         notes: meeting.attendanceNotes ?? undefined,
         photos: [],
         createdAt: meeting.createdAt,
@@ -316,7 +316,7 @@ export function AppProvider({children}: { children: ReactNode }) {
     const [completedWorks, setCompletedWorks] =
         useState<CompletedWork[]>(mockCompletedWorks);
     const [removedYouth, setRemovedYouth] = useState<Youth[]>([]);
-
+    console.log(meetings , "mett")
     // Toast State
     const [toasts, setToasts] = useState<Toast[]>([]);
   useEffect(() => {
@@ -368,6 +368,7 @@ export function AppProvider({children}: { children: ReactNode }) {
 
     useEffect(() => {
         if (meetingsQuery.data) {
+            console.log(meetingsQuery.data.data , "dasd")
             setMeetings(meetingsQuery.data.data.map((item) => meetingToApp(item, youth, masullar)));
         }
     }, [meetingsQuery.data, youth, masullar]);
@@ -666,9 +667,8 @@ export function AppProvider({children}: { children: ReactNode }) {
                     contact: youthData.phone || null,
                     dateOfBirth: youthData.birthDate || null,
                     address: youthData.address || null,
-                    notes: {
-                        text: youthData.category || null
-                    },
+                    notes: youthData.category || null
+
                 })
                 .then(() => queryClient.invalidateQueries({queryKey: ["youth"]}))
                 .catch(() =>
@@ -711,9 +711,7 @@ export function AppProvider({children}: { children: ReactNode }) {
                     contact: data.phone,
                     dateOfBirth: data.birthDate,
                     address: data.address,
-                    notes: {
-                        text: data.category
-                    },
+                    notes: data.category
                 })
                 .then(() => queryClient.invalidateQueries({queryKey: ["youth"]}))
                 .catch(() =>

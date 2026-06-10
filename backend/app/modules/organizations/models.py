@@ -1,6 +1,7 @@
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import String
+from sqlalchemy import DateTime, String
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,5 +16,6 @@ class Organization(Base, TimestampMixin):
     district_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    address: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    director_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    head_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

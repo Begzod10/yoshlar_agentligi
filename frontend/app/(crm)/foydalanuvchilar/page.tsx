@@ -1,10 +1,5 @@
-import { RoleGuard } from "@/components/auth/role-guard";
-import { FoydalanuvchilarPage } from "@/components/pages/foydalanuvchilar-page";
+import { RoleFoydalanuvchilarPage } from "@/components/pages/role-routes/foydalanuvchilar-page";
 
 export default function FoydalanuvchilarRoute() {
-  return (
-    <RoleGuard allow={["admin"]}>
-      <FoydalanuvchilarPage />
-    </RoleGuard>
-  );
+  return <RoleFoydalanuvchilarPage />;
 }
