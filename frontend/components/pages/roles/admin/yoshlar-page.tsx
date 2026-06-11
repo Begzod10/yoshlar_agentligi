@@ -83,6 +83,8 @@ import {
   AlertTriangle,
   Brain,
   Loader2,
+  Paperclip,
+  ImageIcon,
 } from "lucide-react";
 import { DataPagination } from "@/components/ui/data-pagination";
 import { Progress } from "@/components/ui/progress";
@@ -950,6 +952,44 @@ export function AdminYoshlarPage() {
                         <span>{(m as {title?: string}).title ?? `Bosqich ${i + 1}`}</span>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+              {(selectedPlan.attachments?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2 flex items-center gap-1">
+                    <Paperclip className="h-3.5 w-3.5" />
+                    Ilovalar ({selectedPlan.attachments.length})
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {selectedPlan.attachments.map((att, i) => {
+                      const ct = (att as {contentType?: string; content_type?: string}).contentType ?? att.content_type ?? "";
+                      const url = `https://agency.gennis.uz${att.path}`;
+                      const isImg = ct.startsWith("image/");
+                      return (
+                        <a
+                          key={i}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-col items-center gap-1 p-2 rounded bg-muted/50 hover:bg-muted transition-colors text-xs text-center group"
+                          title={att.filename}
+                        >
+                          {isImg ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={url}
+                              alt={att.filename}
+                              className="w-full h-16 object-cover rounded"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          ) : (
+                            <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                          )}
+                          <span className="truncate w-full text-center">{att.filename}</span>
+                        </a>
+                      );
+                    })}
                   </div>
                 </div>
               )}
