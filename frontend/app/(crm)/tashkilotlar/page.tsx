@@ -1,10 +1,10 @@
 import { PageDataLoader } from "@/components/app/page-data-loader";
-import { TashkilotlarPage } from "@/components/pages/tashkilotlar-page";
+import { RoleTashkilotlarPage } from "@/components/pages/role-routes/tashkilotlar-page";
 
 export default function TashkilotlarRoute() {
   return (
     <PageDataLoader resources={["organizations"]}>
-      <TashkilotlarPage />
+      <RoleTashkilotlarPage />
     </PageDataLoader>
   );
 }

@@ -1,5 +1,10 @@
-import { SozlamalarPage } from "@/components/pages/sozlamalar-page";
+import { Suspense } from "react";
+import { RoleSozlamalarPage } from "@/components/pages/role-routes/sozlamalar-page";
 
 export default function SozlamalarRoute() {
-  return <SozlamalarPage />;
+  return (
+    <Suspense>
+      <RoleSozlamalarPage />
+    </Suspense>
+  );
 }

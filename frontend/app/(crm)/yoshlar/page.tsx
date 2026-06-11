@@ -1,10 +1,10 @@
 import { PageDataLoader } from "@/components/app/page-data-loader";
-import { YoshlarPage } from "@/components/pages/yoshlar-page";
+import { RoleYoshlarPage } from "@/components/pages/role-routes/yoshlar-page";
 
 export default function YoshlarRoute() {
   return (
     <PageDataLoader resources={["organizations", "masullar", "youth"]}>
-      <YoshlarPage />
+      <RoleYoshlarPage />
     </PageDataLoader>
   );
 }

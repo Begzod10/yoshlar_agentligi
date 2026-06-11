@@ -7,7 +7,7 @@ function requireEnv(key: string, fallback?: string): string {
 }
 
 export const config = {
-  apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
+  apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "https://agency.gennis.uz",
   appName: process.env.NEXT_PUBLIC_APP_NAME ?? "Yoshlar Agentligi",
   isDev: process.env.NODE_ENV !== "production",
 } as const;
