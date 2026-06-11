@@ -1,10 +1,14 @@
-import { generateText, Output } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
+import { generateObject } from "ai";
 import { z } from "zod";
 
 export const maxDuration = 30;
 
-function isAiConfigured() {
-  return Boolean(process.env.AI_GATEWAY_API_KEY);
+function getOpenAI() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const baseURL = process.env.OPENAI_BASE_URL;
+  if (!apiKey) return null;
+  return createOpenAI({ apiKey, baseURL });
 }
 
 const youthAnalysisSchema = z.object({
@@ -39,80 +43,69 @@ const planRecommendationSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  if (!isAiConfigured()) {
+  const openai = getOpenAI();
+  if (!openai) {
     return Response.json(
-      { error: "AI_GATEWAY_API_KEY sozlanmagan" },
+      { error: "OPENAI_API_KEY sozlanmagan" },
       { status: 503 }
     );
   }
 
   const { type, data } = await req.json();
+  const model = openai("gpt-4.1-mini");
 
   if (type === "youth-analysis") {
     const { youth, meetings, plans } = data;
 
-    const { output } = await generateText({
-      model: "openai/gpt-4o",
-      output: Output.object({ schema: youthAnalysisSchema }),
-      messages: [
-        {
-          role: "user",
-          content: `O'zbekiston Yoshlar agentligi uchun quyidagi yoshning holatini tahlil qiling:
+    const { object } = await generateObject({
+      model,
+      schema: youthAnalysisSchema,
+      prompt: `O'zbekiston Yoshlar agentligi uchun quyidagi yoshning holatini tahlil qiling:
 
 Yosh ma'lumotlari:
 - Ism: ${youth.fullName}
-- Tug'ilgan sana: ${youth.birthDate}
-- Kategoriya: ${youth.category}
+- Tug'ilgan sana: ${youth.birthDate ?? "noma'lum"}
+- Kategoriya: ${youth.category ?? "noma'lum"}
 - Tuman: ${youth.districtId}
 - Joriy status: ${youth.status}
-- Hozirgi AI ball: ${youth.aiScore}
+- Hozirgi AI ball: ${youth.aiScore ?? "N/A"}
 
-Uchrashuvlar soni: ${meetings?.length || 0}
-Rejalar soni: ${plans?.length || 0}
+Uchrashuvlar soni: ${meetings?.length ?? 0}
+Rejalar soni: ${plans?.length ?? 0}
 
-So'nggi uchrashuvlar:
-${meetings?.slice(0, 3).map((m: any) => `- ${m.date}: ${m.notes}`).join("\n") || "Ma'lumot yo'q"}
-
-Iltimos, yoshning holatini batafsil tahlil qiling va tavsiyalar bering.`,
-        },
-      ],
+Yoshning holatini batafsil tahlil qiling va amaliy tavsiyalar bering. Uzbek tilida javob bering.`,
     });
 
-    return Response.json({ analysis: output });
+    return Response.json({ analysis: object });
   }
 
   if (type === "plan-recommendation") {
     const { youth, existingPlans } = data;
 
-    const { output } = await generateText({
-      model: "openai/gpt-4o",
-      output: Output.object({ schema: planRecommendationSchema }),
-      messages: [
-        {
-          role: "user",
-          content: `O'zbekiston Yoshlar agentligi uchun quyidagi yosh uchun individual reja tavsiya qiling:
+    const { object } = await generateObject({
+      model,
+      schema: planRecommendationSchema,
+      prompt: `O'zbekiston Yoshlar agentligi uchun quyidagi yosh uchun 3 oylik individual reja tavsiya qiling:
 
 Yosh ma'lumotlari:
 - Ism: ${youth.fullName}
-- Kategoriya: ${youth.category}
+- Kategoriya: ${youth.category ?? "noma'lum"}
 - Tuman: ${youth.districtId}
 - Joriy status: ${youth.status}
 
-Mavjud rejalar soni: ${existingPlans?.length || 0}
+Mavjud rejalar soni: ${existingPlans?.length ?? 0}
 
-Kategoriya bo'yicha tavsiyalar:
-${youth.category === "Oilada muammoli vaziyatda" ? "- Oilaviy terapiya va ijtimoiy yordam kerak" : ""}
-${youth.category === "Ta'lim olishda qiyinchiliklarga duch kelgan" ? "- Ta'lim ko'magi va kasbiy yo'nalish kerak" : ""}
-${youth.category === "Huquqbuzarlik sodir etgan" ? "- Profilaktika ishlari va huquqiy ma'rifat kerak" : ""}
-${youth.category === "Narkotik moddalardan foydalanuvchi" ? "- Tibbiy reabilitatsiya va psixologik yordam kerak" : ""}
-${youth.category === "Ruhiy-psixologik muammolarga ega" ? "- Professional psixolog va terapiya kerak" : ""}
+Kategoriya bo'yicha yo'nalish:
+${youth.category === "Oilada muammoli vaziyatda" ? "- Oilaviy terapiya va ijtimoiy yordam" : ""}
+${youth.category === "Ta'lim olishda qiyinchiliklarga duch kelgan" ? "- Ta'lim ko'magi va kasbiy yo'nalish" : ""}
+${youth.category === "Huquqbuzarlik sodir etgan" ? "- Profilaktika ishlari va huquqiy ma'rifat" : ""}
+${youth.category === "Narkotik moddalardan foydalanuvchi" ? "- Tibbiy reabilitatsiya va psixologik yordam" : ""}
+${youth.category === "Ruhiy-psixologik muammolarga ega" ? "- Professional psixolog va terapiya" : ""}
 
-Iltimos, 3 oylik individual reja tavsiya qiling.`,
-        },
-      ],
+Uzbek tilida javob bering.`,
     });
 
-    return Response.json({ plan: output });
+    return Response.json({ plan: object });
   }
 
   return Response.json({ error: "Noto'g'ri so'rov turi" }, { status: 400 });
