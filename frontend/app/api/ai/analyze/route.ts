@@ -1,11 +1,15 @@
-import { generateText, Output } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
+import { generateObject } from "ai";
 import { z } from "zod";
 import { mockYouth } from "@/lib/mock-data";
 
 export const maxDuration = 30;
 
-function isAiConfigured() {
-  return Boolean(process.env.AI_GATEWAY_API_KEY);
+function getOpenAI() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const baseURL = process.env.OPENAI_BASE_URL;
+  if (!apiKey) return null;
+  return createOpenAI({ apiKey, baseURL });
 }
 
 const youthAnalysisSchema = z.object({
@@ -54,8 +58,9 @@ function checkYouthOwnership(
 }
 
 export async function POST(req: Request) {
-  if (!isAiConfigured()) {
-    return Response.json({ error: "AI_GATEWAY_API_KEY sozlanmagan" }, { status: 503 });
+  const openai = getOpenAI();
+  if (!openai) {
+    return Response.json({ error: "OPENAI_API_KEY sozlanmagan" }, { status: 503 });
   }
 
   let body: Record<string, unknown>;
@@ -71,6 +76,8 @@ export async function POST(req: Request) {
     youthId?: string;
     userId?: string;
   };
+
+  const model = openai("gpt-4.1-mini");
 
   if (type === "youth-analysis") {
     const clientData = (data ?? {}) as any;
@@ -95,13 +102,10 @@ export async function POST(req: Request) {
     }
 
     try {
-      const { output } = await generateText({
-        model: "openai/gpt-4o",
-        output: Output.object({ schema: youthAnalysisSchema }),
-        messages: [
-          {
-            role: "user",
-            content: `O'zbekiston Yoshlar agentligi uchun quyidagi yoshning holatini tahlil qiling:
+      const { object } = await generateObject({
+        model,
+        schema: youthAnalysisSchema,
+        prompt: `O'zbekiston Yoshlar agentligi uchun quyidagi yoshning holatini tahlil qiling:
 
 Yosh ma'lumotlari:
 - Ism: ${youth.fullName}
@@ -117,23 +121,13 @@ Rejalar soni: ${plans?.length || 0}
 So'nggi uchrashuvlar:
 ${meetings?.slice(0, 3).map((m: any) => `- ${m.date}: ${m.notes}`).join("\n") || "Ma'lumot yo'q"}
 
-Iltimos, yoshning holatini batafsil tahlil qiling va tavsiyalar bering.`,
-          },
-        ],
+Yoshning holatini batafsil tahlil qiling va amaliy tavsiyalar bering. Uzbek tilida javob bering.`,
       });
 
-      const parsed = youthAnalysisSchema.safeParse(output);
-      if (!parsed.success) {
-        return Response.json(
-          { error: "ai_schema_error", detail: parsed.error.flatten() },
-          { status: 502 }
-        );
-      }
-
-      return Response.json({ analysis: parsed.data });
-    } catch (error: any) {
-      console.error("[AI analyze] youth-analysis error:", error);
-      return Response.json({ error: "ai_error", message: error.message }, { status: 502 });
+      return Response.json({ analysis: object });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return Response.json({ error: "ai_error", message: msg }, { status: 502 });
     }
   }
 
@@ -161,13 +155,10 @@ Iltimos, yoshning holatini batafsil tahlil qiling va tavsiyalar bering.`,
     const existingPlans = clientData.existingPlans ?? [];
 
     try {
-      const { output } = await generateText({
-        model: "openai/gpt-4o",
-        output: Output.object({ schema: planRecommendationSchema }),
-        messages: [
-          {
-            role: "user",
-            content: `O'zbekiston Yoshlar agentligi uchun quyidagi yosh uchun individual reja tavsiya qiling:
+      const { object } = await generateObject({
+        model,
+        schema: planRecommendationSchema,
+        prompt: `O'zbekiston Yoshlar agentligi uchun quyidagi yosh uchun individual reja tavsiya qiling:
 
 Yosh ma'lumotlari:
 - Ism: ${youth.fullName}
@@ -187,23 +178,13 @@ ${youth.category === "Ijtimoiy himoya" ? "- Ijtimoiy xizmatlar va yordam dasturl
 ${youth.category === "Ta'lim" ? "- O'quv rejasi, kasbiy yo'naltirish va mentorlik kerak" : ""}
 ${youth.category === "Bandlik" ? "- Kasb-hunar o'qitish va ish joylari bilan bog'lash kerak" : ""}
 
-Iltimos, 3 oylik individual reja tavsiya qiling.`,
-          },
-        ],
+3 oylik individual reja tavsiya qiling. Uzbek tilida javob bering.`,
       });
 
-      const parsed = planRecommendationSchema.safeParse(output);
-      if (!parsed.success) {
-        return Response.json(
-          { error: "ai_schema_error", detail: parsed.error.flatten() },
-          { status: 502 }
-        );
-      }
-
-      return Response.json({ plan: parsed.data });
-    } catch (error: any) {
-      console.error("[AI analyze] plan-recommendation error:", error);
-      return Response.json({ error: "ai_error", message: error.message }, { status: 502 });
+      return Response.json({ plan: object });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return Response.json({ error: "ai_error", message: msg }, { status: 502 });
     }
   }
 
