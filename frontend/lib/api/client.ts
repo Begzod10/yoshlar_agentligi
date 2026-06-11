@@ -1,7 +1,31 @@
 import { config } from "@/lib/config";
-import { getAccessToken } from "@/lib/auth/storage";
+import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "@/lib/auth/storage";
 import { ApiError } from "@/lib/api/errors";
-import type { ApiErrorBody } from "@/lib/api/types";
+import type { ApiErrorBody, LoginResponse } from "@/lib/api/types";
+
+// Single in-flight refresh promise to prevent parallel refresh races.
+let _refreshPromise: Promise<string> | null = null;
+
+async function refreshAccessToken(): Promise<string> {
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = (async () => {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) throw new Error("no_refresh_token");
+    const res = await fetch(buildUrl("/api/auth/refresh"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) {
+      clearTokens();
+      throw new Error("refresh_failed");
+    }
+    const data: LoginResponse = await res.json();
+    setTokens({ access: data.accessToken, refresh: data.refreshToken });
+    return data.accessToken;
+  })().finally(() => { _refreshPromise = null; });
+  return _refreshPromise;
+}
 
 interface RequestOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
@@ -71,11 +95,9 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return url.toString();
 }
 
-export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, headers, query, ...rest } = options;
-  const token = getAccessToken();
-
-  const res = await fetch(buildUrl(path, query), {
+async function doFetch(url: string, token: string | null, options: RequestOptions): Promise<Response> {
+  const { body, headers, ...rest } = options;
+  return fetch(url, {
     ...rest,
     headers: {
       Accept: "application/json",
@@ -83,10 +105,28 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
-    // Convert camelCase body keys → snake_case before sending to backend
     body: body !== undefined ? JSON.stringify(snakeize(body)) : undefined,
     credentials: "include",
   });
+}
+
+export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { query, ...rest } = options;
+  const url = buildUrl(path, query);
+  const isRefreshEndpoint = path.includes("/api/auth/refresh");
+
+  let res = await doFetch(url, getAccessToken(), rest);
+
+  // On 401, attempt one token refresh and retry (skip for the refresh endpoint itself).
+  if (res.status === 401 && !isRefreshEndpoint) {
+    try {
+      const newToken = await refreshAccessToken();
+      res = await doFetch(url, newToken, rest);
+    } catch {
+      clearTokens();
+      throw new ApiError("token_expired", "Session expired", 401);
+    }
+  }
 
   if (!res.ok) {
     const payload = (await res.json().catch(() => null)) as ApiErrorBody | null;
