@@ -6,6 +6,7 @@ from pydantic import Field
 
 from app.core.base_schema import CamelModel, schema_example
 from app.core.constants import MeetingAttendance
+from app.modules.youth.schemas import YouthBrief
 
 
 class MeetingBase(CamelModel):
@@ -85,5 +86,6 @@ class MeetingRead(CamelModel):
     attendance_status: MeetingAttendance
     attendance_notes: str | None
     attachments: list[dict[str, Any]]
+    youth: YouthBrief | None = None
     created_at: datetime
     updated_at: datetime

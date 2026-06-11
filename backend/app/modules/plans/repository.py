@@ -18,7 +18,7 @@ class PlansRepository:
     async def get_by_id(self, plan_id: UUID) -> Plan | None:
         stmt = (
             select(Plan)
-            .options(selectinload(Plan.masul))
+            .options(selectinload(Plan.masul), selectinload(Plan.youth))
             .where(Plan.id == plan_id, Plan.deleted_at.is_(None))
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
@@ -38,7 +38,7 @@ class PlansRepository:
     ) -> tuple[list[Plan], int]:
         base = (
             select(Plan)
-            .options(selectinload(Plan.masul))
+            .options(selectinload(Plan.masul), selectinload(Plan.youth))
             .join(Youth, Youth.id == Plan.youth_id)
             .where(Plan.deleted_at.is_(None), Youth.deleted_at.is_(None))
         )
