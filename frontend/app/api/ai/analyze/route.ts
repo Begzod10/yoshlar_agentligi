@@ -127,7 +127,8 @@ Yoshning holatini batafsil tahlil qiling va amaliy tavsiyalar bering. Uzbek tili
       return Response.json({ analysis: object });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
-      return Response.json({ error: "ai_error", message: msg }, { status: 502 });
+      console.error("[ai/analyze] youth-analysis error:", msg);
+      return Response.json({ error: "ai_error", message: msg }, { status: 500 });
     }
   }
 
@@ -184,7 +185,8 @@ ${youth.category === "Bandlik" ? "- Kasb-hunar o'qitish va ish joylari bilan bog
       return Response.json({ plan: object });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
-      return Response.json({ error: "ai_error", message: msg }, { status: 502 });
+      console.error("[ai/analyze] plan-recommendation error:", msg);
+      return Response.json({ error: "ai_error", message: msg }, { status: 500 });
     }
   }
 
