@@ -7,6 +7,7 @@ import { useApp } from "@/lib/app-context";
 import { downloadReport } from "@/lib/api/hooks/use-core-api";
 import { usePageDataContext } from "@/lib/page-data-context";
 import { ResourcePagination } from "@/components/app/resource-pagination";
+import { useOrganizations } from "@/lib/api/hooks/use-core-api";
 import type { Organization, ToshkentDistrict } from "@/lib/types";
 import { TOSHKENT_VILOYATI_DISTRICTS } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,6 +82,9 @@ export function TashkilotlarPage() {
     showToast,
   } = useApp();
 
+  // Fire GET /api/organizations on mount
+  useOrganizations({ page: 1, limit: 100 });
+
   const isAdmin = currentUser?.role === "admin";
   const isDirektor = currentUser?.role === "direktor";
   const isTashkilotDirektor = currentUser?.role === "tashkilot_direktori";
@@ -111,22 +115,38 @@ export function TashkilotlarPage() {
     });
   }, [effectiveDistrict, pageData, searchQuery]);
 
+  // Filter organizations based on role and selection
+  let filteredOrganizations = organizations.filter((org) => {
+    // Role-based filtering
+    // if (isTashkilotDirektor && currentUser?.districtId) {
+    //   if (org.districtId !== currentUser.districtId) return false;
+    // }
+    //
+    // // Global district filter
+    // if (selectedDistrict && org.districtId !== selectedDistrict) return false;
+    //
+    // // Local district filter
+    // if (districtFilter !== "all" && org.districtId !== districtFilter) return false;
+
   const filteredOrganizations = organizations;
 
-  const handleExport = () => {
-    void downloadReport
-      .organizations(effectiveDistrict)
-      .then(() => showToast("Export yuklab olindi", "success"))
-      .catch((error) =>
-        showToast(error instanceof Error ? error.message : "Export yuklanmadi", "error")
-      );
-  };
+
+    // return matchesSearch;
+  });
+    console.log(organizations, 'user')
 
   // Get available districts for filter
   const availableDistricts = isTashkilotDirektor && currentUser?.districtId
     ? [currentUser.districtId]
     : TOSHKENT_VILOYATI_DISTRICTS;
-
+  const handleExport = () => {
+    void downloadReport
+        .organizations(effectiveDistrict)
+        .then(() => showToast("Export yuklab olindi", "success"))
+        .catch((error) =>
+            showToast(error instanceof Error ? error.message : "Export yuklanmadi", "error")
+        );
+  };
   // Statistics
   const totalOrganizations = filteredOrganizations.length;
   const totalMasullar = filteredOrganizations.reduce((sum, org) => sum + org.masullarCount, 0);
@@ -275,6 +295,8 @@ export function TashkilotlarPage() {
       {/* Organizations Table */}
       <Card>
         <CardContent className="p-0">
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -330,33 +352,17 @@ export function TashkilotlarPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Amallar</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSelectedOrg(org);
-                              setIsViewDialogOpen(true);
-                            }}
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            Ko'rish
+                          <DropdownMenuItem onClick={() => { setSelectedOrg(org); setIsViewDialogOpen(true); }}>
+                            <Eye className="mr-2 h-4 w-4" />Ko'rish
                           </DropdownMenuItem>
                           {canEdit && (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedOrg(org);
-                                setIsEditDialogOpen(true);
-                              }}
-                            >
-                              <Edit className="mr-2 h-4 w-4" />
-                              Tahrirlash
+                            <DropdownMenuItem onClick={() => { setSelectedOrg(org); setIsEditDialogOpen(true); }}>
+                              <Edit className="mr-2 h-4 w-4" />Tahrirlash
                             </DropdownMenuItem>
                           )}
                           {isAdmin && (
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => setDeleteCandidate(org)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              O'chirish
+                            <DropdownMenuItem className="text-destructive" onClick={() => setDeleteCandidate(org)}>
+                              <Trash2 className="mr-2 h-4 w-4" />O'chirish
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
@@ -367,6 +373,61 @@ export function TashkilotlarPage() {
               )}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile card list */}
+          <div className="md:hidden">
+            {filteredOrganizations.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <Building2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>Tashkilotlar topilmadi</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {filteredOrganizations.map((org) => (
+                  <div key={org.id} className="p-4">
+                    {/* Row 1: icon + name + district */}
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+                          <Building2 className="h-5 w-5 text-primary" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{org.name}</p>
+                          {org.address && (
+                            <p className="text-xs text-muted-foreground truncate">{org.address}</p>
+                          )}
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="gap-1 shrink-0 text-xs">
+                        <MapPin className="h-3 w-3" />
+                        {org.districtId}
+                      </Badge>
+                    </div>
+                    {/* Row 2: direktor + counters */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 pl-[52px]">
+                      {org.directorName && (
+                        <span className="text-sm text-muted-foreground">{org.directorName}</span>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{org.masullarCount}</span> mas'ul
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{org.yoshlarCount}</span> yosh
+                      </span>
+                    </div>
+                    {/* Row 3: action button */}
+                    <div className="flex items-center gap-2 pl-[52px]">
+                      <Button size="sm" variant="outline" className="h-8 text-xs bg-transparent"
+                        onClick={() => { setSelectedOrg(org); setIsViewDialogOpen(true); }}>
+                        <Eye className="h-3.5 w-3.5 mr-1" />Ko'rish
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <ResourcePagination resource="organizations" />
         </CardContent>
       </Card>
@@ -464,6 +525,21 @@ export function TashkilotlarPage() {
                   <span className="font-medium">{selectedOrg.createdAt}</span>
                 </div>
               </div>
+              {(canEdit || isAdmin) && (
+                <div className="md:hidden flex gap-2 pt-2">
+                  {canEdit && (
+                    <Button className="flex-1" onClick={() => { setIsViewDialogOpen(false); setIsEditDialogOpen(true); }}>
+                      <Edit className="mr-2 h-4 w-4" />Tahrirlash
+                    </Button>
+                  )}
+                  {isAdmin && (
+                    <Button variant="outline" className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/5"
+                      onClick={() => { setIsViewDialogOpen(false); setDeleteCandidate(selectedOrg); }}>
+                      <Trash2 className="mr-2 h-4 w-4" />O'chirish
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

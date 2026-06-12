@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0005_plan_notes_attachments"
-down_revision = "0004_profile_extensions"
+down_revision = "0006_missing_columns"
 branch_labels = None
 depends_on = None
 

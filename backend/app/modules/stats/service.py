@@ -247,13 +247,40 @@ class StatsService:
         )
         rows = (await self._session.execute(stmt)).all()
 
-        results = []
+        # Build rows with formula fallback scores
+        raw_rows = []
         for r in rows:
             y = r[0]
             tp, cp, tm, am = r[1], r[2], r[3], r[4]
             plan_score = (cp / tp * 60) if tp else 0
             meet_score = (am / tm * 40) if tm else 0
-            ai_score = round((plan_score + meet_score) * 100) / 100
+            formula_score = round((plan_score + meet_score) * 100) / 100
+            raw_rows.append({
+                "youth": y,
+                "tp": tp, "cp": cp, "tm": tm, "am": am,
+                "formula_score": formula_score,
+            })
+
+        # AI scoring
+        from app.modules.ai.service import AiService
+        ai_input = [
+            {
+                "id": str(r["youth"].id),
+                "name": r["youth"].full_name,
+                "plan_pct": round(r["cp"] / r["tp"] * 100, 1) if r["tp"] else 0,
+                "meet_pct": round(r["am"] / r["tm"] * 100, 1) if r["tm"] else 0,
+                "district": r["youth"].district_id,
+            }
+            for r in raw_rows
+        ]
+        ai_scores = await AiService().score_entities("yosh (youth)", ai_input)
+
+        results = []
+        for r in raw_rows:
+            y = r["youth"]
+            ai_result = ai_scores.get(str(y.id))
+            ai_score = ai_result[0] if ai_result else r["formula_score"]
+            ai_comment = ai_result[1] if ai_result else None
             results.append(TopYoshRow(
                 id=y.id,
                 full_name=y.full_name,
@@ -261,11 +288,12 @@ class StatsService:
                 organization_id=y.organization_id,
                 masul_id=y.masul_id,
                 status=y.status,
-                total_plans=tp,
-                completed_plans=cp,
-                total_meetings=tm,
-                attended_meetings=am,
+                total_plans=r["tp"],
+                completed_plans=r["cp"],
+                total_meetings=r["tm"],
+                attended_meetings=r["am"],
                 ai_score=ai_score,
+                ai_comment=ai_comment,
             ))
 
         results.sort(key=lambda x: x.ai_score, reverse=True)
@@ -292,43 +320,6 @@ class StatsService:
         ]
 
     async def ai_insights(self) -> list[AiInsight]:
+        from app.modules.ai.service import AiService
         stats = await self.agency_stats()
-        insights: list[AiInsight] = []
-
-        bajarilish = round(stats.completed_plans / stats.total_plans * 100) if stats.total_plans else 0
-        if bajarilish >= 80:
-            insights.append(AiInsight(
-                type="positive",
-                text=f"Rejalar bajarish darajasi {bajarilish}% — bu a'lo natija! Yoshlar maqsadlarga intilmoqda.",
-            ))
-        elif bajarilish >= 50:
-            insights.append(AiInsight(
-                type="info",
-                text=f"Rejalar bajarish darajasi {bajarilish}%. Yaxshi natija, ammo yaxshilash imkoni bor.",
-            ))
-        else:
-            insights.append(AiInsight(
-                type="warning",
-                text=f"Rejalar bajarish darajasi {bajarilish}% — past ko'rsatkich. Mas'ullar bilan ishlash zarur.",
-            ))
-
-        attend_pct = round(stats.attended_meetings / stats.total_meetings * 100) if stats.total_meetings else 0
-        if attend_pct >= 75:
-            insights.append(AiInsight(
-                type="positive",
-                text=f"Uchrashuvlarga davomat {attend_pct}% — yoshlar faol ishtirok etmoqda.",
-            ))
-        else:
-            insights.append(AiInsight(
-                type="warning",
-                text=f"Uchrashuvlarga davomat {attend_pct}%. Davomat ko'rsatkichini oshirish tavsiya etiladi.",
-            ))
-
-        if stats.active_youth > 0 and stats.total_masullar > 0:
-            ratio = round(stats.active_youth / stats.total_masullar, 1)
-            insights.append(AiInsight(
-                type="info",
-                text=f"Har bir mas'ulga o'rtacha {ratio} nafar faol yosh to'g'ri keladi.",
-            ))
-
-        return insights
+        return await AiService().generate_insights(stats)

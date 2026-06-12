@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import type { LoginRequest, LoginResponse, User } from "@/lib/api/types";
-import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "@/lib/auth/storage";
+import { clearTokens, getAccessToken, setTokens } from "@/lib/auth/storage";
 
 interface SessionContextValue {
   user: User | null;
@@ -28,22 +28,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         return await api.get<User>("/api/auth/me");
       } catch (err) {
         if (err instanceof ApiError && err.isUnauthorized) {
-          const refreshToken = getRefreshToken();
-          if (refreshToken) {
-            try {
-              const refreshed = await api.post<LoginResponse>("/api/auth/refresh", {
-                refreshToken,
-              });
-              setTokens({
-                access: refreshed.accessToken,
-                refresh: refreshed.refreshToken,
-              });
-              return refreshed.user;
-            } catch {
-              clearTokens();
-              return null;
-            }
-          }
           clearTokens();
           return null;
         }

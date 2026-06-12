@@ -94,7 +94,7 @@ export function AIChat({ context, className }: AIChatProps) {
       <Button
         onClick={() => setIsOpen(true)}
         className={cn(
-          "fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50",
+          "fixed bottom-20 right-6 h-14 w-14 rounded-full shadow-lg z-50",
           "bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90",
           className
         )}
@@ -108,7 +108,7 @@ export function AIChat({ context, className }: AIChatProps) {
   return (
     <Card
       className={cn(
-        "fixed bottom-6 right-6 z-50 shadow-2xl border-2",
+        "fixed bottom-20 right-6 z-50 shadow-2xl border-2",
         isMinimized ? "w-80 h-14" : "w-96 h-[600px]",
         "transition-all duration-200",
         className

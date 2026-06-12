@@ -1,9 +1,11 @@
 import os
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 
@@ -19,6 +21,24 @@ from app.routers.mobile import router as mobile_router
 from app.routers.moderator import router as moderator_router
 
 log = get_logger(__name__)
+
+
+def _sanitize(value: Any) -> Any:
+    """Recursively replace bytes with a safe placeholder so JSON encoding never fails."""
+    if isinstance(value, bytes):
+        return f"<binary {len(value)} bytes>"
+    if isinstance(value, dict):
+        return {k: _sanitize(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize(item) for item in value]
+    return value
+
+
+async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={"detail": _sanitize(exc.errors())},
+    )
 
 
 @asynccontextmanager
@@ -56,6 +76,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestIdMiddleware)
 
     app.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
 
     # ── common (all roles) ──────────────────────────────────
     app.include_router(common_router)

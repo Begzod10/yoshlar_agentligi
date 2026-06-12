@@ -3,10 +3,9 @@
 import { useApp } from "@/lib/app-context";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types";
-import { Bell, Search, Menu, User, LogOut, Settings, HelpCircle, MapPin } from "lucide-react";
-import { DistrictFilter } from "@/components/ui/district-selector";
+import { useRouter } from "next/navigation";
+import { Bell, Menu, User, LogOut, Settings, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,6 +39,7 @@ interface TopbarProps {
 
 export function Topbar({ onLogout }: TopbarProps) {
   const { currentUser, sidebarOpen, setSidebarOpen, switchRole, setCurrentPage } = useApp();
+  const router = useRouter();
 
   const getInitials = (name: string) => {
     return name
@@ -54,7 +54,8 @@ export function Topbar({ onLogout }: TopbarProps) {
     <header
       className={cn(
         "fixed top-0 right-0 z-30 h-16 bg-card border-b border-border transition-all duration-300",
-        sidebarOpen ? "left-64" : "left-16"
+        "left-0",
+        sidebarOpen ? "lg:left-64" : "lg:left-16"
       )}
     >
       <div className="flex h-full items-center justify-between px-4 gap-4">
@@ -68,23 +69,10 @@ export function Topbar({ onLogout }: TopbarProps) {
           >
             <Menu className="h-5 w-5" />
           </Button>
-
-          {/* Search */}
-          <div className="relative hidden md:block">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Qidirish..."
-              className="w-64 pl-9 h-9 bg-muted/50"
-            />
-          </div>
         </div>
 
         {/* Right side */}
         <div className="flex items-center gap-2">
-          {/* District Filter */}
-          <DistrictFilter className="hidden lg:flex" />
-
           {/* Role Switcher - For Demo */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -199,11 +187,11 @@ export function Topbar({ onLogout }: TopbarProps) {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Mening hisobim</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { setCurrentPage("sozlamalar"); router.push("/sozlamalar?tab=profile"); }}>
                 <User className="mr-2 h-4 w-4" />
                 Profil
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { setCurrentPage("sozlamalar"); router.push("/sozlamalar"); }}>
                 <Settings className="mr-2 h-4 w-4" />
                 Sozlamalar
               </DropdownMenuItem>

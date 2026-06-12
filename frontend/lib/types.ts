@@ -73,6 +73,7 @@ export interface Youth {
   createdAt: string;
   removalReason?: string;
   removalDate?: string;
+
 }
 
 export interface Masul {
@@ -87,6 +88,7 @@ export interface Masul {
   completedPlansCount: number;
   meetingsCount: number;
   aiScore: number;
+  aiComment?: string | null;
   createdAt: string;
 }
 
@@ -117,11 +119,17 @@ export interface Meeting {
   date: string;
   time?: string;
   location: string;
-  type?: "individual" | "group" | "home_visit" | "online" | string | null;
+  type?: "individual" | "group" | "home_visit" | "online" | string ;
   status: "scheduled" | "completed" | "cancelled";
+
   notes?: string;
   photos?: string[];
+
+  attendanceStatus?: "attended" | "no_show" | "rescheduled";
+  attachments?: string[];
+
   createdAt: string;
+  agenda?: string | null;
 }
 
 export interface CompletedWork {

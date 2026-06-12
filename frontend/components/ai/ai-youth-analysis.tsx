@@ -27,6 +27,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import type { Youth, Meeting, IndividualPlan } from "@/lib/types";
+import {api} from "@/lib/api/client";
 
 interface AIYouthAnalysisProps {
   youth: Youth;

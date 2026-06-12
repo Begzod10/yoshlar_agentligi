@@ -31,12 +31,13 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: str | None = None
+    openai_base_url: str | None = None
     ai_daily_token_budget_per_user: int = 50_000
 
     log_level: str = "INFO"
 
-    backups_dir: str = "/home/rimefara/projects/yoshlar_agentligi/backups"
-    media_dir: str = "/home/rimefara/projects/yoshlar_agentligi/backend/media"
+    backups_dir: str = "backups"
+    media_dir: str = "media"
 
     @field_validator("cors_origins", mode="before")
     @classmethod

@@ -3,7 +3,7 @@ import uuid as uuid_lib
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
 
 from app.core.audit_context import AuditDep
 from app.core.config import get_settings
@@ -70,20 +70,69 @@ async def get_plan(plan_id: UUID, current: Access, session: DbSession) -> PlanRe
 
 @router.patch("/{plan_id}", response_model=PlanRead)
 async def update_plan(
+    request: Request,
     plan_id: UUID,
-    payload: PlanUpdate,
     current: Access,
     session: DbSession,
     audit: AuditDep,
 ) -> PlanRead:
-    await _service(session).update(current, plan_id, payload)
-    await session.commit()
-    plan = await PlansRepository(session).get_by_id(plan_id)
-    await audit.record(
-        "plan.update", "plan", plan_id,
-        before=payload.model_dump(exclude_unset=True, mode="json"),
-        after=PlanRead.model_validate(plan).model_dump(mode="json"),
-    )
+    content_type = request.headers.get("content-type", "")
+    is_multipart = "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type
+
+    if is_multipart:
+        # Mobile app sends progress updates as multipart form data to this endpoint.
+        form = await request.form()
+        raw_progress = form.get("progress")
+        raw_status = form.get("status")
+        notes = form.get("notes") or None
+        attachment_field = form.get("attachment")
+
+        attachment_info = None
+        if attachment_field and hasattr(attachment_field, "filename") and attachment_field.filename:
+            settings = get_settings()
+            folder = os.path.join(settings.media_dir, "plans", str(plan_id))
+            os.makedirs(folder, exist_ok=True)
+            ext = os.path.splitext(attachment_field.filename)[1]
+            saved_name = f"{uuid_lib.uuid4()}{ext}"
+            saved_path = os.path.join(folder, saved_name)
+            content = await attachment_field.read()
+            with open(saved_path, "wb") as fh:
+                fh.write(content)
+            attachment_info = {
+                "filename": attachment_field.filename,
+                "path": f"/media/plans/{plan_id}/{saved_name}",
+                "size": len(content),
+                "contentType": attachment_field.content_type,
+            }
+
+        parsed_status = PlanStatus(raw_status) if raw_status else None
+        progress_payload = PlanProgressUpdate(
+            progress=int(raw_progress) if raw_progress is not None else None,
+            status=parsed_status,
+            notes=notes,
+        )
+        await _service(session).update_progress(current, plan_id, progress_payload, attachment_info)
+        audit_data: dict = {
+            "progress": raw_progress,
+            "status": raw_status,
+            "notes": notes,
+            "attachment": attachment_info,
+        }
+        await session.commit()
+        plan = await PlansRepository(session).get_by_id(plan_id)
+        await audit.record("plan.update_progress", "plan", plan_id, after=audit_data)
+    else:
+        body = await request.json()
+        payload = PlanUpdate.model_validate(body)
+        await _service(session).update(current, plan_id, payload)
+        await session.commit()
+        plan = await PlansRepository(session).get_by_id(plan_id)
+        await audit.record(
+            "plan.update", "plan", plan_id,
+            before=payload.model_dump(exclude_unset=True, mode="json"),
+            after=PlanRead.model_validate(plan).model_dump(mode="json"),
+        )
+
     await session.commit()
     return PlanRead.model_validate(plan)
 

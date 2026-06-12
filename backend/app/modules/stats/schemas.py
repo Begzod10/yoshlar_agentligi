@@ -66,6 +66,7 @@ class TopYoshRow(CamelModel):
     total_meetings: int
     attended_meetings: int
     ai_score: float
+    ai_comment: str | None = None
 
 
 class RecentActivityRow(CamelModel):
