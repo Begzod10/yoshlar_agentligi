@@ -96,7 +96,7 @@ export function RejalarPage() {
   const isTashkilotDirektor = currentUser?.role === "tashkilot_direktori";
   const canAdd = isAdmin || isDirektor || isTashkilotDirektor || isMasul;
   const canEdit = isAdmin || isDirektor || isTashkilotDirektor || isMasul;
-  const canDelete = isAdmin || isDirektor;
+  const canDelete = isAdmin || isDirektor || isMasul;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
