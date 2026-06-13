@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useApp } from "@/lib/app-context";
 import { usePlans } from "@/lib/api/hooks/use-core-api";
-import type { IndividualPlan } from "@/lib/types";
+import type { IndividualPlan, PlanMilestone } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,7 +104,7 @@ export function RejalarPage() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isProgressDialogOpen, setIsProgressDialogOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<IndividualPlan | null>(null);
-  const [progressValue, setProgressValue] = useState(0);
+  const [progressMilestones, setProgressMilestones] = useState<PlanMilestone[]>([]);
   const [progressComment, setProgressComment] = useState("");
 
   // AI state
@@ -282,16 +282,31 @@ export function RejalarPage() {
   // ─── Update Progress ─────────────────────────────────────────────────────────
   const openProgressDialog = (plan: IndividualPlan) => {
     setSelectedPlan(plan);
-    setProgressValue(plan.progress);
+    setProgressMilestones(
+      plan.milestones.length > 0
+        ? plan.milestones.map((m) => ({ ...m }))
+        : [{ title: plan.title, done: plan.progress === 100, dueDate: null }]
+    );
     setProgressComment("");
     setIsProgressDialogOpen(true);
   };
 
+  const calcProgress = (ms: PlanMilestone[]) =>
+    ms.length === 0 ? 0 : Math.round((ms.filter((m) => m.done).length / ms.length) * 100);
+
+  const toggleMilestone = (index: number) => {
+    setProgressMilestones((prev) =>
+      prev.map((m, i) => (i === index ? { ...m, done: !m.done } : m))
+    );
+  };
+
   const handleUpdateProgress = () => {
     if (!selectedPlan) return;
+    const progress = calcProgress(progressMilestones);
     updatePlan(selectedPlan.id, {
-      progress: progressValue,
-      status: progressValue === 100 ? "completed" : "in_progress",
+      milestones: progressMilestones,
+      progress,
+      status: progress === 100 ? "completed" : "in_progress",
     });
     setIsProgressDialogOpen(false);
   };
@@ -798,32 +813,40 @@ export function RejalarPage() {
               <DialogDescription>{selectedPlan?.title}</DialogDescription>
             </DialogHeader>
             <div className="space-y-5 py-2">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label>Bajarilish darajasi</Label>
-                  <span className="text-2xl font-bold text-primary">{progressValue}%</span>
-                </div>
-                <input
-                    id="progress-slider"
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={progressValue}
-                    onChange={(e) => setProgressValue(Number(e.target.value))}
-                    className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>0%</span>
-                  <span>50%</span>
-                  <span>100%</span>
+              <div className="flex items-center justify-between">
+                <Label>Bajarilish darajasi</Label>
+                <span className="text-2xl font-bold text-primary">
+                  {calcProgress(progressMilestones)}%
+                </span>
+              </div>
+              <Progress value={calcProgress(progressMilestones)} className="h-2" />
+
+              <div className="space-y-2">
+                <Label>Bosqichlar</Label>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {progressMilestones.map((m, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => toggleMilestone(i)}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-colors hover:bg-muted/50"
+                    >
+                      <div className={`h-5 w-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${m.done ? "bg-primary border-primary" : "border-muted-foreground"}`}>
+                        {m.done && <CheckCircle className="h-3 w-3 text-primary-foreground" />}
+                      </div>
+                      <span className={`text-sm ${m.done ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                        {m.title}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
-              {progressValue === 100 && (
-                  <div className="flex items-center gap-2 p-3 rounded-lg bg-accent/10 text-accent text-sm">
-                    <CheckCircle className="h-4 w-4 shrink-0" />
-                    Reja bajarilgan deb belgilanadi
-                  </div>
+
+              {calcProgress(progressMilestones) === 100 && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-accent/10 text-accent text-sm">
+                  <CheckCircle className="h-4 w-4 shrink-0" />
+                  Reja bajarilgan deb belgilanadi
+                </div>
               )}
               <div className="space-y-2">
                 <Label htmlFor="progress-comment">Izoh (ixtiyoriy)</Label>

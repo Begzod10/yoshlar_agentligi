@@ -652,6 +652,7 @@ export const mockPlans: IndividualPlan[] = [
     endDate: "2024-06-15",
     status: "in_progress",
     progress: 65,
+    milestones: [],
     createdAt: "2024-03-10",
   },
   {
@@ -666,6 +667,7 @@ export const mockPlans: IndividualPlan[] = [
     endDate: "2024-07-01",
     status: "in_progress",
     progress: 45,
+    milestones: [],
     createdAt: "2024-03-25",
   },
   {
@@ -680,6 +682,7 @@ export const mockPlans: IndividualPlan[] = [
     endDate: "2024-05-20",
     status: "completed",
     progress: 100,
+    milestones: [],
     createdAt: "2024-03-15",
   },
   {
@@ -694,6 +697,7 @@ export const mockPlans: IndividualPlan[] = [
     endDate: "2024-03-01",
     status: "completed",
     progress: 100,
+    milestones: [],
     createdAt: "2024-01-25",
   },
   {
@@ -708,6 +712,7 @@ export const mockPlans: IndividualPlan[] = [
     endDate: "2024-07-10",
     status: "planned",
     progress: 0,
+    milestones: [],
     createdAt: "2024-04-05",
   },
   {
@@ -722,6 +727,7 @@ export const mockPlans: IndividualPlan[] = [
     endDate: "2024-07-15",
     status: "in_progress",
     progress: 30,
+    milestones: [],
     createdAt: "2024-04-10",
   },
   {
@@ -736,6 +742,7 @@ export const mockPlans: IndividualPlan[] = [
     endDate: "2024-08-20",
     status: "in_progress",
     progress: 25,
+    milestones: [],
     createdAt: "2024-04-15",
   },
 ];

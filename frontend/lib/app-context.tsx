@@ -227,6 +227,11 @@ export function planToApp(plan: PlanRead, youth: Youth[], masullar: Masul[]): In
         endDate: plan.endDate ?? "",
         status: plan.status === "draft" ? "planned" : plan.status,
         progress: plan.progress,
+        milestones: (plan.milestones ?? []).map((m) => ({
+            title: String((m as Record<string, unknown>).title ?? ""),
+            done: Boolean((m as Record<string, unknown>).done ?? false),
+            dueDate: ((m as Record<string, unknown>).dueDate as string | null) ?? null,
+        })),
         createdAt: plan.createdAt,
     };
 }
@@ -977,13 +982,13 @@ export function AppProvider({children}: { children: ReactNode }) {
             setPlans((prev) => [...prev, newPlan]);
 
             const payload = {
-                youth_id: planData.youthId,
-                masul_id: planData.masulId, // 🔥 FIX HERE
+                youthId: planData.youthId,
+                masulId: planData.masulId || null,
                 title: planData.title,
                 goal: planData.description || null,
                 milestones: [],
-                start_date: planData.startDate || null,
-                end_date: planData.endDate || null,
+                startDate: planData.startDate || null,
+                endDate: planData.endDate || null,
             };
 
             void api
@@ -1023,6 +1028,7 @@ export function AppProvider({children}: { children: ReactNode }) {
                     progress: data.progress,
                     startDate: data.startDate,
                     endDate: data.endDate,
+                    milestones: data.milestones,
                 })
                 .then(() => queryClient.invalidateQueries({queryKey: ["plans"]}))
                 .catch(() =>
