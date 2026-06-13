@@ -6,7 +6,6 @@ from pydantic import Field
 
 from app.core.base_schema import CamelModel, schema_example
 from app.core.constants import PlanStatus
-from app.modules.youth.schemas import YouthBrief
 
 
 class Milestone(CamelModel):
@@ -108,7 +107,6 @@ class PlanRead(CamelModel):
     progress: int
     notes: str | None
     attachments: list[dict[str, Any]]
-    youth: YouthBrief | None = None
     start_date: date | None
     end_date: date | None
     created_at: datetime

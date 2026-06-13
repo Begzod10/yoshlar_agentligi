@@ -19,7 +19,7 @@ class MeetingsRepository:
     async def get_by_id(self, meeting_id: UUID) -> Meeting | None:
         stmt = (
             select(Meeting)
-            .options(selectinload(Meeting.masul), selectinload(Meeting.youth))
+            .options(selectinload(Meeting.masul))
             .where(Meeting.id == meeting_id, Meeting.deleted_at.is_(None))
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
@@ -40,7 +40,7 @@ class MeetingsRepository:
     ) -> tuple[list[Meeting], int]:
         base = (
             select(Meeting)
-            .options(selectinload(Meeting.masul), selectinload(Meeting.youth))
+            .options(selectinload(Meeting.masul))
             .join(Youth, Youth.id == Meeting.youth_id)
             .where(Meeting.deleted_at.is_(None), Youth.deleted_at.is_(None))
         )

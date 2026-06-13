@@ -47,9 +47,6 @@ class Plan(Base, TimestampMixin):
     masul: Mapped["Masul | None"] = relationship(  # type: ignore[name-defined]
         "Masul", foreign_keys=[masul_id], lazy="raise"
     )
-    youth: Mapped["Youth"] = relationship(  # type: ignore[name-defined]
-        "Youth", foreign_keys=[youth_id], lazy="raise"
-    )
 
     @property
     def masul_name(self) -> str | None:

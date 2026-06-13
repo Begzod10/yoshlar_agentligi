@@ -8,16 +8,6 @@ from app.core.base_schema import CamelModel, schema_example
 from app.core.constants import YouthStatus
 
 
-class YouthBrief(CamelModel):
-    id: UUID
-    full_name: str
-    district_id: str
-    status: YouthStatus
-    category: str | None = None
-    date_of_birth: date | None = None
-    contact: str | None = None
-
-
 class YouthBase(CamelModel):
     full_name: str = Field(min_length=2, max_length=255)
     district_id: str = Field(min_length=1, max_length=64)
