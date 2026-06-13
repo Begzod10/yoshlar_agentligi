@@ -71,3 +71,4 @@ class UserRead(CamelModel):
     is_active: bool
     last_login_at: datetime | None
     created_at: datetime
+    masul_id: UUID | None = None

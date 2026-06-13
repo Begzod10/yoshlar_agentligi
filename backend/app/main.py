@@ -17,6 +17,7 @@ from app.middleware.request_id import RequestIdMiddleware
 from app.admin.router import router as admin_router
 from app.routers.common import router as common_router
 from app.routers.direktor import router as direktor_router
+from app.routers.mobile import router as mobile_router
 from app.routers.moderator import router as moderator_router
 
 log = get_logger(__name__)
@@ -85,6 +86,9 @@ def create_app() -> FastAPI:
 
     # ── moderator: flags, stats, audit, reports, monitoring
     app.include_router(moderator_router)
+
+    # ── mobile: masul_hodim lightweight endpoints
+    app.include_router(mobile_router)
 
     # ── admin panel ──────────────────────────────────────────
     app.include_router(admin_router)

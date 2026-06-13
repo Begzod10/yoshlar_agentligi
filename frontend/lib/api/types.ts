@@ -38,6 +38,7 @@ export interface User {
   isActive: boolean;
   lastLoginAt: string | null;
   createdAt: string;
+  masulId?: string | null;
 }
 
 export interface LoginRequest {
