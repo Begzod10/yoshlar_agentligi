@@ -751,7 +751,7 @@ export function SozlamalarPage() {
                     type="button"
                     variant={theme === "light" ? "default" : "outline"}
                     className="h-auto flex-col gap-2 py-4"
-                    onClick={() => handleThemeChange(\1)}
+                    onClick={() => handleThemeChange("light")}
                   >
                     <Sun className="h-5 w-5" />
                     <span>Yorug'</span>
@@ -760,7 +760,7 @@ export function SozlamalarPage() {
                     type="button"
                     variant={theme === "dark" ? "default" : "outline"}
                     className="h-auto flex-col gap-2 py-4"
-                    onClick={() => handleThemeChange(\1)}
+                    onClick={() => handleThemeChange("dark")}
                   >
                     <Moon className="h-5 w-5" />
                     <span>Qorong'u</span>
@@ -769,7 +769,7 @@ export function SozlamalarPage() {
                     type="button"
                     variant={theme === "system" ? "default" : "outline"}
                     className="h-auto flex-col gap-2 py-4"
-                    onClick={() => handleThemeChange(\1)}
+                    onClick={() => handleThemeChange("system")}
                   >
                     <Monitor className="h-5 w-5" />
                     <span>Tizim</span>
