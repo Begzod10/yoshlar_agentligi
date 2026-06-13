@@ -2,11 +2,12 @@
 
 import React from "react"
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/app-context";
 import { useAgencyStats, usePlans } from "@/lib/api/hooks/use-core-api";
-import { APP_PAGE_HREFS, type AppPageId } from "@/lib/navigation";
+import { APP_PAGE_HREFS, pathnameToPage, type AppPageId } from "@/lib/navigation";
 import type { UserRole } from "@/lib/types";
 import {
   LayoutDashboard,
@@ -46,7 +47,8 @@ export function Sidebar({
   currentPage: string;
 }) {
   const { currentUser, sidebarOpen, setSidebarOpen } = useApp();
-  console.log(currentPage)
+  const pathname = usePathname();
+  const activePage = pathnameToPage(pathname);
   // Real API counts for badges
   const { data: stats } = useAgencyStats();
   const { data: inProgressPlans } = usePlans({ status: "in_progress", page: 1, limit: 1 });
@@ -112,7 +114,7 @@ export function Sidebar({
       title: "Chiqarilgan yoshlar",
       id: "chiqarilgan",
       icon: UserMinus,
-      roles: ["admin", "direktor", "tashkilot_direktori"],
+      roles: ["direktor", "tashkilot_direktori"],
       getBadge: () => graduatedCount || undefined,
     },
     {
@@ -171,7 +173,7 @@ export function Sidebar({
           <nav className="p-2 space-y-1">
             {filteredNavItems.map((item) => {
               const Icon = item.icon;
-              const isActive = currentPage === item.id;
+              const isActive = activePage === item.id;
               const badge = item.getBadge?.();
 
               if (!sidebarOpen) {

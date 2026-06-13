@@ -44,7 +44,7 @@ async def list_youth(
     status: str | None = Query(default=None),
     search: str | None = Query(default=None, min_length=1, max_length=255),
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=20, ge=1, le=200),
+    limit: int = Query(default=20, ge=1, le=1000),
 ) -> Page[YouthRead]:
     params = PageParams(page=page, limit=limit)
     items, total = await YouthRepository(session).list_for_scope(
@@ -65,10 +65,10 @@ async def create_youth(
     payload: YouthCreate, current: Access, session: DbSession, audit: AuditDep
 ) -> YouthRead:
     youth = await _service(session).create(current, payload)
-    await audit.record(
-        "youth.create", "youth", youth.id,
-        after=YouthRead.model_validate(youth).model_dump(mode="json"),
-    )
+    youth_id = youth.id
+    await session.commit()
+    youth = await YouthRepository(session).get_by_id(youth_id)
+    await audit.record("youth.create", "youth", youth_id, after=YouthRead.model_validate(youth).model_dump(mode="json"))
     await session.commit()
     return YouthRead.model_validate(youth)
 
@@ -95,7 +95,9 @@ async def update_youth(
         effective = YouthUpdateByMasul(
             **payload.model_dump(include={"contact", "notes"}, exclude_unset=True)
         )
-    youth = await _service(session).update(current, youth_id, effective)
+    await _service(session).update(current, youth_id, effective)
+    await session.commit()
+    youth = await YouthRepository(session).get_by_id(youth_id)
     await audit.record(
         "youth.update", "youth", youth_id,
         before=effective.model_dump(exclude_unset=True, mode="json"),
@@ -113,11 +115,10 @@ async def assign_masul(
     session: DbSession,
     audit: AuditDep,
 ) -> YouthRead:
-    youth = await _service(session).assign_masul(current, youth_id, payload.masul_id)
-    await audit.record(
-        "youth.assign_masul", "youth", youth_id,
-        after={"masul_id": str(payload.masul_id)},
-    )
+    await _service(session).assign_masul(current, youth_id, payload.masul_id)
+    await session.commit()
+    youth = await YouthRepository(session).get_by_id(youth_id)
+    await audit.record("youth.assign_masul", "youth", youth_id, after={"masul_id": str(payload.masul_id)})
     await session.commit()
     return YouthRead.model_validate(youth)
 
@@ -130,10 +131,10 @@ async def set_youth_status(
     session: DbSession,
     audit: AuditDep,
 ) -> YouthRead:
-    youth = await _service(session).set_status(current, youth_id, payload.status)
-    await audit.record(
-        "youth.set_status", "youth", youth_id, after={"status": payload.status.value}
-    )
+    await _service(session).set_status(current, youth_id, payload.status)
+    await session.commit()
+    youth = await YouthRepository(session).get_by_id(youth_id)
+    await audit.record("youth.set_status", "youth", youth_id, after={"status": payload.status.value})
     await session.commit()
     return YouthRead.model_validate(youth)
 

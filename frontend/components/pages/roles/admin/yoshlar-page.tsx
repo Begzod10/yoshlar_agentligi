@@ -10,7 +10,7 @@ import {
   useRestoreYouth,
 } from "@/lib/api/hooks/use-admin";
 import { youthCategories } from "@/lib/mock-data";
-import type { YouthRead, MasulRead } from "@/lib/api/types";
+import type { YouthRead, MasulRead, PlanRead, MeetingRead, PlanStatus, MeetingAttendance } from "@/lib/api/types";
 import { TOSHKENT_VILOYATI_DISTRICTS, type ToshkentDistrict } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -83,8 +83,46 @@ import {
   AlertTriangle,
   Brain,
   Loader2,
+  Paperclip,
+  ImageIcon,
 } from "lucide-react";
 import { DataPagination } from "@/components/ui/data-pagination";
+import { Progress } from "@/components/ui/progress";
+
+const PLAN_STATUS_LABELS: Record<PlanStatus, string> = {
+  draft: "Qoralama",
+  in_progress: "Jarayonda",
+  completed: "Bajarildi",
+  cancelled: "Bekor qilindi",
+};
+
+const PLAN_STATUS_COLORS: Record<PlanStatus, string> = {
+  draft: "bg-gray-100 text-gray-700",
+  in_progress: "bg-blue-100 text-blue-700",
+  completed: "bg-green-100 text-green-700",
+  cancelled: "bg-red-100 text-red-700",
+};
+
+const MEETING_ATTENDANCE_LABELS: Record<MeetingAttendance, string> = {
+  scheduled: "Rejalashtirilgan",
+  attended: "Keldi",
+  no_show: "Kelmadi",
+  rescheduled: "Qayta rejalashtirildi",
+};
+
+const MEETING_ATTENDANCE_COLORS: Record<MeetingAttendance, string> = {
+  scheduled: "bg-gray-100 text-gray-700",
+  attended: "bg-green-100 text-green-700",
+  no_show: "bg-red-100 text-red-700",
+  rescheduled: "bg-yellow-100 text-yellow-700",
+};
+
+const MEETING_TYPE_LABELS: Record<string, string> = {
+  individual: "Individual",
+  group: "Guruhiy",
+  home_visit: "Uy tashrifi",
+  online: "Online",
+};
 
 export function AdminYoshlarPage() {
   const { currentUser, addToast, setCurrentPage } = useApp();
@@ -141,6 +179,12 @@ export function AdminYoshlarPage() {
     return m;
   }, [masullarData]);
 
+  const masulObjectMap = useMemo(() => {
+    const m: Record<string, MasulRead> = {};
+    for (const ms of masullarData?.data ?? []) m[ms.id] = ms;
+    return m;
+  }, [masullarData]);
+
   const getMasulName = (y: YouthRead) => y.masulName ?? (y.masulId ? (masulMap[y.masulId] ?? null) : null);
 
   // ── Dialog state ──────────────────────────────────────────────────────
@@ -150,14 +194,38 @@ export function AdminYoshlarPage() {
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
   const [isAIAnalysisOpen, setIsAIAnalysisOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<PlanRead | null>(null);
+  const [isPlanDetailOpen, setIsPlanDetailOpen] = useState(false);
+  const [selectedMeeting, setSelectedMeeting] = useState<MeetingRead | null>(null);
+  const [isMeetingDetailOpen, setIsMeetingDetailOpen] = useState(false);
 
   const [selectedYouth, setSelectedYouth] = useState<YouthRead | null>(null);
   const [selectedMasulId, setSelectedMasulId] = useState<string>("");
+  const [selectedMasulProfile, setSelectedMasulProfile] = useState<MasulRead | null>(null);
+  const [isMasulProfileOpen, setIsMasulProfileOpen] = useState(false);
   const [removeReason, setRemoveReason] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [newYouthDistrict, setNewYouthDistrict] = useState<string>(
     currentUser?.districtId ?? ""
   );
+
+  const { data: youthPlansData, isLoading: plansLoading } = useQuery({
+    queryKey: ["youth-plans-modal", selectedYouth?.id],
+    queryFn: () =>
+      adminApi.get<{ data: PlanRead[]; total: number }>("/api/plans", {
+        query: { youth_id: selectedYouth!.id, limit: 50 },
+      }),
+    enabled: isViewDialogOpen && !!selectedYouth?.id,
+  });
+
+  const { data: youthMeetingsData, isLoading: meetingsLoading } = useQuery({
+    queryKey: ["youth-meetings-modal", selectedYouth?.id],
+    queryFn: () =>
+      adminApi.get<{ data: MeetingRead[]; total: number }>("/api/meetings", {
+        query: { youth_id: selectedYouth!.id, limit: 50 },
+      }),
+    enabled: isViewDialogOpen && !!selectedYouth?.id,
+  });
 
   // Masullar filtered by selected youth's district (for assign dialog)
   const assignableMasullar = useMemo(
@@ -373,7 +441,8 @@ export function AdminYoshlarPage() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -424,7 +493,15 @@ export function AdminYoshlarPage() {
                     {!isMasul && (
                       <TableCell>
                         {getMasulName(youth) ? (
-                          <span className="text-sm">{getMasulName(youth)}</span>
+                          <button
+                            className="text-sm text-primary underline decoration-dotted hover:decoration-solid hover:text-primary/80 transition-colors cursor-pointer text-left"
+                            onClick={() => {
+                              const masul = youth.masulId ? masulObjectMap[youth.masulId] : null;
+                              if (masul) { setSelectedMasulProfile(masul); setIsMasulProfileOpen(true); }
+                            }}
+                          >
+                            {getMasulName(youth)}
+                          </button>
                         ) : (
                           <Badge variant="secondary" className="text-orange-600 bg-orange-50">
                             Biriktirilmagan
@@ -446,10 +523,7 @@ export function AdminYoshlarPage() {
                           <DropdownMenuItem onClick={() => { setSelectedYouth(youth); setIsViewDialogOpen(true); }}>
                             <Eye className="h-4 w-4 mr-2" />Ko'rish
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => { setSelectedYouth(youth); setIsAIAnalysisOpen(true); }}
-                            className="text-primary"
-                          >
+                          <DropdownMenuItem onClick={() => { setSelectedYouth(youth); setIsAIAnalysisOpen(true); }} className="text-primary">
                             <Brain className="h-4 w-4 mr-2" />AI Tahlil
                           </DropdownMenuItem>
                           {canEdit && !isMasul && (
@@ -465,10 +539,7 @@ export function AdminYoshlarPage() {
                           {canEdit && !isMasul && youth.status === "active" && (
                             <>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => { setSelectedYouth(youth); setIsRemoveDialogOpen(true); }}
-                              >
+                              <DropdownMenuItem className="text-destructive" onClick={() => { setSelectedYouth(youth); setIsRemoveDialogOpen(true); }}>
                                 <UserMinus className="h-4 w-4 mr-2" />Chiqarish
                               </DropdownMenuItem>
                             </>
@@ -486,6 +557,68 @@ export function AdminYoshlarPage() {
               )}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile card list */}
+          <div className="md:hidden">
+            {youthListLoading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : filteredYouth.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>Yoshlar topilmadi</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {filteredYouth.map((youth) => (
+                  <div key={youth.id} className="p-4">
+                    {/* Row 1: avatar + name + status */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <span className="text-sm font-medium text-primary">
+                            {youth.fullName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{youth.fullName}</p>
+                          <p className="text-sm text-muted-foreground">{youth.contact ?? "—"}</p>
+                        </div>
+                      </div>
+                      {getStatusBadge(youth.status)}
+                    </div>
+                    {/* Row 2: badges */}
+                    <div className="flex flex-wrap items-center gap-2 mb-3 pl-[52px]">
+                      <DistrictBadge districtId={youth.districtId as ToshkentDistrict} size="sm" />
+                      {youth.category && <Badge variant="outline" className="text-xs">{youth.category}</Badge>}
+                      {!isMasul && !getMasulName(youth) && (
+                        <Badge variant="secondary" className="text-orange-600 bg-orange-50 text-xs">Biriktirilmagan</Badge>
+                      )}
+                      {!isMasul && getMasulName(youth) && (
+                        <button
+                          className="text-xs text-primary underline decoration-dotted hover:decoration-solid cursor-pointer"
+                          onClick={() => {
+                            const masul = youth.masulId ? masulObjectMap[youth.masulId] : null;
+                            if (masul) { setSelectedMasulProfile(masul); setIsMasulProfileOpen(true); }
+                          }}
+                        >
+                          {getMasulName(youth)}
+                        </button>
+                      )}
+                    </div>
+                    {/* Row 3: action button */}
+                    <div className="flex items-center gap-2 pl-[52px]">
+                      <Button size="sm" variant="outline" className="h-8 text-xs bg-transparent"
+                        onClick={() => { setSelectedYouth(youth); setIsViewDialogOpen(true); }}>
+                        <Eye className="h-3.5 w-3.5 mr-1" />Ko'rish
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -516,7 +649,7 @@ export function AdminYoshlarPage() {
                 <Label htmlFor="fullName">F.I.O *</Label>
                 <Input id="fullName" name="fullName" required placeholder="To'liq ism" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
                   <Label htmlFor="birthDate">Tug'ilgan sana</Label>
                   <Input id="birthDate" name="birthDate" type="date" />
@@ -526,7 +659,7 @@ export function AdminYoshlarPage() {
                   <Input id="phone" name="phone" placeholder="+998901234567" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="grid gap-2">
                   <Label>Tuman *</Label>
                   {isTashkilotDirektor && currentUser?.districtId ? (
@@ -593,11 +726,24 @@ export function AdminYoshlarPage() {
             <DialogDescription>Yoshning to'liq ma'lumotlari</DialogDescription>
           </DialogHeader>
           {selectedYouth && (
+            <>
             <Tabs defaultValue="info" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="info">Ma'lumotlar</TabsTrigger>
-                <TabsTrigger value="navigation">Sahifalar</TabsTrigger>
+                <TabsTrigger value="rejalar">
+                  Rejalar
+                  {(youthPlansData?.data?.length ?? 0) > 0 && (
+                    <span className="ml-1 text-xs opacity-70">({youthPlansData!.data.length})</span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="uchrashuvlar">
+                  Uchrashuvlar
+                  {(youthMeetingsData?.data?.length ?? 0) > 0 && (
+                    <span className="ml-1 text-xs opacity-70">({youthMeetingsData!.data.length})</span>
+                  )}
+                </TabsTrigger>
               </TabsList>
+
               <TabsContent value="info" className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-3">
@@ -638,17 +784,291 @@ export function AdminYoshlarPage() {
                   </div>
                 </div>
               </TabsContent>
-              <TabsContent value="navigation" className="mt-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <Button variant="outline" className="bg-transparent" onClick={() => setCurrentPage("rejalar")}>
-                    <FileText className="h-4 w-4 mr-2" />Rejalar
-                  </Button>
-                  <Button variant="outline" className="bg-transparent" onClick={() => setCurrentPage("uchrashuvlar")}>
-                    <Calendar className="h-4 w-4 mr-2" />Uchrashuvlar
-                  </Button>
-                </div>
+
+              <TabsContent value="rejalar" className="mt-4">
+                {plansLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (youthPlansData?.data ?? []).length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">Rejalar topilmadi</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {(youthPlansData?.data ?? []).map((plan) => (
+                      <div
+                        key={plan.id}
+                        className="p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => { setSelectedPlan(plan); setIsPlanDetailOpen(true); }}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <p className="text-sm font-medium leading-snug line-clamp-2">{plan.title}</p>
+                          <Badge className={`text-xs shrink-0 ${PLAN_STATUS_COLORS[plan.status]}`}>
+                            {PLAN_STATUS_LABELS[plan.status]}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Progress value={plan.progress ?? 0} className="h-1.5 flex-1" />
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">{plan.progress ?? 0}%</span>
+                        </div>
+                        {(plan.startDate || plan.endDate) && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {plan.startDate ?? "—"} → {plan.endDate ?? "—"}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="uchrashuvlar" className="mt-4">
+                {meetingsLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (youthMeetingsData?.data ?? []).length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Calendar className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">Uchrashuvlar topilmadi</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {(youthMeetingsData?.data ?? []).map((meeting) => (
+                      <div
+                        key={meeting.id}
+                        className="p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => { setSelectedMeeting(meeting); setIsMeetingDetailOpen(true); }}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <p className="text-sm font-medium leading-snug line-clamp-2">
+                            {meeting.agenda ?? MEETING_TYPE_LABELS[meeting.type ?? ""] ?? "Uchrashuv"}
+                          </p>
+                          <Badge className={`text-xs shrink-0 ${MEETING_ATTENDANCE_COLORS[meeting.attendanceStatus]}`}>
+                            {MEETING_ATTENDANCE_LABELS[meeting.attendanceStatus]}
+                          </Badge>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {meeting.scheduledAt?.slice(0, 10)} {meeting.scheduledAt?.slice(11, 16)}
+                          </span>
+                          {meeting.location && (
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              {meeting.location}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
+            {selectedYouth && (canEdit || canAssign || isAdmin) && (
+              <div className="md:hidden flex flex-wrap gap-2 pt-2 border-t">
+                {canEdit && !isMasul && (
+                  <Button className="flex-1" onClick={() => { setIsViewDialogOpen(false); setIsEditDialogOpen(true); }}>
+                    <Edit className="mr-2 h-4 w-4" />Tahrirlash
+                  </Button>
+                )}
+                {canAssign && !isMasul && !selectedYouth.masulId && (
+                  <Button variant="outline" className="flex-1" onClick={() => { setIsViewDialogOpen(false); setIsAssignDialogOpen(true); }}>
+                    <UserPlus className="mr-2 h-4 w-4" />Biriktirish
+                  </Button>
+                )}
+                {canEdit && !isMasul && selectedYouth.status === "active" && (
+                  <Button variant="outline" className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/5"
+                    onClick={() => { setIsViewDialogOpen(false); setIsRemoveDialogOpen(true); }}>
+                    <UserMinus className="mr-2 h-4 w-4" />Chiqarish
+                  </Button>
+                )}
+                {isAdmin && selectedYouth.status !== "active" && (
+                  <Button variant="outline" className="flex-1" onClick={() => { setIsViewDialogOpen(false); void handleRestoreYouth(selectedYouth); }}>
+                    <CheckCircle className="mr-2 h-4 w-4" />Tiklash
+                  </Button>
+                )}
+              </div>
+            )}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Plan Detail Dialog */}
+      <Dialog open={isPlanDetailOpen} onOpenChange={setIsPlanDetailOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-start gap-2">
+              <FileText className="h-5 w-5 mt-0.5 shrink-0 text-muted-foreground" />
+              <span className="leading-snug">{selectedPlan?.title}</span>
+            </DialogTitle>
+            {selectedPlan && (
+              <Badge className={`w-fit text-xs ${PLAN_STATUS_COLORS[selectedPlan.status]}`}>
+                {PLAN_STATUS_LABELS[selectedPlan.status]}
+              </Badge>
+            )}
+          </DialogHeader>
+          {selectedPlan && (
+            <div className="space-y-4 py-2">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-muted-foreground">Bajarilish</span>
+                  <span className="text-sm font-medium">{selectedPlan.progress ?? 0}%</span>
+                </div>
+                <Progress value={selectedPlan.progress ?? 0} className="h-2" />
+              </div>
+              {selectedPlan.goal && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Maqsad</p>
+                  <p className="text-sm">{selectedPlan.goal}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Boshlanish</p>
+                  <p className="font-medium">{selectedPlan.startDate ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Tugash</p>
+                  <p className="font-medium">{selectedPlan.endDate ?? "—"}</p>
+                </div>
+              </div>
+              {selectedPlan.masulName && (
+                <div className="text-sm">
+                  <p className="text-muted-foreground">Mas'ul hodim</p>
+                  <p className="font-medium">{selectedPlan.masulName}</p>
+                </div>
+              )}
+              {(selectedPlan.milestones?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Bosqichlar ({selectedPlan.milestones.length})</p>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {selectedPlan.milestones.map((m, i) => (
+                      <div key={i} className="flex items-center gap-2 text-sm p-2 rounded bg-muted/50">
+                        <CheckCircle className={`h-4 w-4 shrink-0 ${(m as {done?: boolean}).done ? "text-green-600" : "text-muted-foreground"}`} />
+                        <span>{(m as {title?: string}).title ?? `Bosqich ${i + 1}`}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(selectedPlan.attachments?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2 flex items-center gap-1">
+                    <Paperclip className="h-3.5 w-3.5" />
+                    Ilovalar ({selectedPlan.attachments.length})
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {selectedPlan.attachments.map((att, i) => {
+                      const ct = (att as {contentType?: string; content_type?: string}).contentType ?? att.content_type ?? "";
+                      const url = `https://agency.gennis.uz${att.path}`;
+                      const isImg = ct.startsWith("image/");
+                      return (
+                        <a
+                          key={i}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-col items-center gap-1 p-2 rounded bg-muted/50 hover:bg-muted transition-colors text-xs text-center group"
+                          title={att.filename}
+                        >
+                          {isImg ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={url}
+                              alt={att.filename}
+                              className="w-full h-16 object-cover rounded"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          ) : (
+                            <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                          )}
+                          <span className="truncate w-full text-center">{att.filename}</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Meeting Detail Dialog */}
+      <Dialog open={isMeetingDetailOpen} onOpenChange={setIsMeetingDetailOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-start gap-2">
+              <Calendar className="h-5 w-5 mt-0.5 shrink-0 text-muted-foreground" />
+              <span className="leading-snug">
+                {selectedMeeting?.agenda ?? MEETING_TYPE_LABELS[selectedMeeting?.type ?? ""] ?? "Uchrashuv"}
+              </span>
+            </DialogTitle>
+            {selectedMeeting && (
+              <Badge className={`w-fit text-xs ${MEETING_ATTENDANCE_COLORS[selectedMeeting.attendanceStatus]}`}>
+                {MEETING_ATTENDANCE_LABELS[selectedMeeting.attendanceStatus]}
+              </Badge>
+            )}
+          </DialogHeader>
+          {selectedMeeting && (
+            <div className="space-y-3 py-2">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Sana va vaqt</p>
+                  <p className="font-medium">
+                    {selectedMeeting.scheduledAt?.slice(0, 10)}{" "}
+                    {selectedMeeting.scheduledAt?.slice(11, 16)}
+                  </p>
+                </div>
+                {selectedMeeting.type && (
+                  <div>
+                    <p className="text-muted-foreground">Turi</p>
+                    <p className="font-medium">{MEETING_TYPE_LABELS[selectedMeeting.type] ?? selectedMeeting.type}</p>
+                  </div>
+                )}
+              </div>
+              {selectedMeeting.location && (
+                <div className="text-sm">
+                  <p className="text-muted-foreground">Joyi</p>
+                  <p className="font-medium flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                    {selectedMeeting.location}
+                  </p>
+                </div>
+              )}
+              {selectedMeeting.masulName && (
+                <div className="text-sm">
+                  <p className="text-muted-foreground">Mas'ul hodim</p>
+                  <p className="font-medium">{selectedMeeting.masulName}</p>
+                </div>
+              )}
+              {selectedMeeting.attendanceNotes && (
+                <div className="text-sm">
+                  <p className="text-muted-foreground mb-1">Izoh</p>
+                  <p className="p-2 rounded bg-muted/50">{selectedMeeting.attendanceNotes}</p>
+                </div>
+              )}
+              {(selectedMeeting.attachments?.length ?? 0) > 0 && (
+                <div className="text-sm">
+                  <p className="text-muted-foreground mb-1">
+                    Ilovalar ({selectedMeeting.attachments.length})
+                  </p>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {selectedMeeting.attachments.map((att, i) => (
+                      <div key={i} className="flex items-center gap-2 p-2 rounded bg-muted/50 text-xs">
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="truncate">{att.filename}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -667,7 +1087,7 @@ export function AdminYoshlarPage() {
                   <Label htmlFor="edit-fullName">F.I.O</Label>
                   <Input id="edit-fullName" name="fullName" defaultValue={selectedYouth.fullName} required />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3">
                   <div className="grid gap-2">
                     <Label htmlFor="edit-birthDate">Tug'ilgan sana</Label>
                     <Input id="edit-birthDate" name="birthDate" type="date" defaultValue={selectedYouth.dateOfBirth ?? ""} />
@@ -797,6 +1217,46 @@ export function AdminYoshlarPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Masul Profile Dialog */}
+      <Dialog open={isMasulProfileOpen} onOpenChange={setIsMasulProfileOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Mas'ul hodim profili</DialogTitle>
+          </DialogHeader>
+          {selectedMasulProfile && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xl shrink-0">
+                  {selectedMasulProfile.fullName.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold">{selectedMasulProfile.fullName}</h3>
+                  {selectedMasulProfile.position && (
+                    <p className="text-sm text-muted-foreground">{selectedMasulProfile.position}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid gap-0 divide-y">
+                {[
+                  { label: "Email", val: selectedMasulProfile.email },
+                  { label: "Telefon", val: selectedMasulProfile.phone ?? "—" },
+                  { label: "Tuman", val: selectedMasulProfile.districtId },
+                  {
+                    label: "Qo'shilgan sana",
+                    val: new Date(selectedMasulProfile.createdAt).toLocaleDateString("uz-UZ"),
+                  },
+                ].map(({ label, val }) => (
+                  <div key={label} className="flex justify-between py-2.5">
+                    <span className="text-muted-foreground text-sm">{label}</span>
+                    <span className="font-medium text-sm">{val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* AI Analysis Dialog */}
       {selectedYouth && isAIAnalysisOpen && (

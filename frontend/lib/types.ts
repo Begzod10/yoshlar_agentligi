@@ -88,6 +88,7 @@ export interface Masul {
   completedPlansCount: number;
   meetingsCount: number;
   aiScore: number;
+  aiComment?: string | null;
   createdAt: string;
 }
 

@@ -3,6 +3,7 @@
 import React from "react"
 
 import { useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useApp } from "@/lib/app-context";
 import {
   useAdminAuditLog,
@@ -76,6 +77,15 @@ const roleLabels = {
 
 export function SozlamalarPage() {
   const { currentUser, showToast } = useApp();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") ?? "profile");
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab) setActiveTab(tab);
+  }, [searchParams]);
+
   const isAdmin = currentUser?.role === "admin";
   const [auditPage, setAuditPage] = useState(1);
   const auditLog = useAdminAuditLog({ page: auditPage, limit: 50, enabled: isAdmin });
@@ -279,7 +289,7 @@ export function SozlamalarPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="profile" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); router.replace(`?tab=${v}`, { scroll: false }); }} className="space-y-6">
         <TabsList className="bg-muted/50">
           <TabsTrigger value="profile" className="gap-2">
             <User className="h-4 w-4" />

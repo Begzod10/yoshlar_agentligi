@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: str | None = None
+    openai_base_url: str | None = None
     ai_daily_token_budget_per_user: int = 50_000
 
     log_level: str = "INFO"
