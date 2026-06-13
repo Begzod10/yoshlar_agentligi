@@ -36,7 +36,8 @@ export interface User {
   lastLogin?: string;
   organizationId?: string;
   organizationName?: string;
-  districtId?: ToshkentDistrict; // District assignment for tashkilot_direktori
+  districtId?: ToshkentDistrict;
+  masulId?: string;
   avatar?: string;
   createdAt: string;
 }

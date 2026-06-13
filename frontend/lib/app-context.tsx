@@ -149,6 +149,7 @@ function apiUserToAppUser(user: ApiUser): User {
         status: user.isActive ? "active" : "inactive",
         lastLogin: user.lastLoginAt ?? undefined,
         districtId: user.districtId ? asDistrict(user.districtId) : undefined,
+        masulId: user.masulId ?? undefined,
         createdAt: user.createdAt,
     };
 }
@@ -1256,7 +1257,7 @@ export function AppProvider({children}: { children: ReactNode }) {
             case "masul_hodim":
                 // Can only see assigned youth
                 filteredYouth = youth.filter(
-                    (y) => y.assignedMasulId === currentUser.id
+                    (y) => y.assignedMasulId === currentUser.masulId
                 );
                 break;
             default:
