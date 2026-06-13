@@ -99,6 +99,7 @@ export function YoshlarPage() {
   const {
     currentUser,
     selectedDistrict,
+      youth,
     getVisibleYouth,
     getVisibleMasullar,
     getMasullarsForDistrict,
@@ -122,6 +123,8 @@ export function YoshlarPage() {
   const restoreYouth = useRestoreYouth();
 
   const visibleYouth = getVisibleYouth();
+  console.log(youth , "you")
+  console.log(visibleYouth , "log")
   const visibleMasullar = getVisibleMasullar();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -212,7 +215,7 @@ export function YoshlarPage() {
   }, [isViewDialogOpen, selectedYouthId]);
 
   const filteredYouth = visibleYouth;
-
+  console.log(visibleYouth , "visebla")
   const handleExport = () => {
     const promise = effectiveDistrict
       ? downloadReport.district(effectiveDistrict)

@@ -168,6 +168,7 @@ export function AdminYoshlarPage() {
     [masullarData, selectedYouth]
   );
 
+
   // ── Client-side filtering (category + search; district+status go to API) ──
   const filteredYouth = (youthData?.data ?? []).filter((y) => {
     if (isMasul && y.masulId !== currentUser?.id) return false;
@@ -178,7 +179,7 @@ export function AdminYoshlarPage() {
       (y.contact ?? "").includes(searchQuery)
     );
   });
-
+  console.log(filteredYouth)
   // ── CRUD handlers ─────────────────────────────────────────────────────
   const handleAddYouth = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

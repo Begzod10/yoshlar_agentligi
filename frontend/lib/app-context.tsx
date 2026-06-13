@@ -292,7 +292,7 @@ export function AppProvider({children}: { children: ReactNode }) {
     const [currentUser, setCurrentUser] = useState<User | null>(
         loadLS(LS_KEYS.user, null)
     );
-
+    console.log(currentUser, "currentUser")
     // Youth Category Selection (Pre-Login)
     const [selectedYouthCategory, setSelectedYouthCategory] =
         useState<YouthCategoryType>(loadLS(LS_KEYS.youthCategory, null));
