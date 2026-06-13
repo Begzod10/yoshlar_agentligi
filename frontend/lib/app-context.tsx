@@ -149,6 +149,7 @@ function apiUserToAppUser(user: ApiUser): User {
         status: user.isActive ? "active" : "inactive",
         lastLogin: user.lastLoginAt ?? undefined,
         districtId: user.districtId ? asDistrict(user.districtId) : undefined,
+        masulId: user.masulId ?? undefined,
         createdAt: user.createdAt,
     };
 }
