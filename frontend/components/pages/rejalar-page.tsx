@@ -132,7 +132,7 @@ export function RejalarPage() {
 
   let filteredPlans = plans.filter((p) => {
     if (isMasul) {
-      if (p.masulId !== currentUser?.id) return false;
+      if (p.masulId !== currentUser?.masulId) return false;
     } else if (isTashkilotDirektor && currentUser?.districtId) {
       if (!youthIds.includes(p.youthId)) return false;
     } else if (selectedDistrict && selectedDistrict !== "all") {
@@ -257,7 +257,7 @@ export function RejalarPage() {
     }
 
     const selectedYouthObj = filteredYouth.find((y) => y.id === formYouthId);
-    const masulId = isMasul ? currentUser?.id || "" : formMasulId;
+    const masulId = isMasul ? currentUser?.masulId || "" : formMasulId;
     const selectedMasulObj = masullar.find((m) => m.id === masulId);
 
     addPlan({

@@ -5,7 +5,13 @@ import {
   UIMessage,
   tool,
 } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
+
+const openai = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: process.env.OPENAI_BASE_URL,
+});
 
 export const maxDuration = 30;
 
@@ -43,7 +49,7 @@ Yoshlar kategoriyalari:
 ${context ? `Joriy kontekst: ${JSON.stringify(context)}` : ""}`;
 
   const result = streamText({
-    model: "openai/gpt-4o",
+    model: openai("gpt-4o"),
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     tools: {

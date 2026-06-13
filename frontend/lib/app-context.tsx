@@ -1263,7 +1263,7 @@ export function AppProvider({children}: { children: ReactNode }) {
             case "masul_hodim":
                 // Can only see assigned youth
                 filteredYouth = youth.filter(
-                    (y) => y.masulId === currentUser.masulId
+                    (y) => y.assignedMasulId === currentUser.masulId
                 );
                 break;
             default:
@@ -1333,7 +1333,7 @@ export function AppProvider({children}: { children: ReactNode }) {
                     return masul?.districtId === currentUser.districtId;
                 });
             case "masul_hodim":
-                return plans.filter((p) => p.masulId === currentUser.id);
+                return plans.filter((p) => p.masulId === currentUser.masulId);
             default:
                 return [];
         }
@@ -1358,7 +1358,7 @@ export function AppProvider({children}: { children: ReactNode }) {
                     return masul?.districtId === currentUser.districtId;
                 });
             case "masul_hodim":
-                return meetings.filter((m) => m.masulId === currentUser.id);
+                return meetings.filter((m) => m.masulId === currentUser.masulId);
             default:
                 return [];
         }
