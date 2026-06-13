@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.84",
     "@ai-sdk/openai": "^3.0.69",
     "@ai-sdk/react": "3.0.52",
     "@hookform/resolvers": "^3.10.0",
