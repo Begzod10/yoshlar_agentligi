@@ -55,6 +55,37 @@ const quickPrompts = [
   },
 ];
 
+function renderMarkdown(text: string) {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let key = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      elements.push(<br key={key++} />);
+      continue;
+    }
+    // parse inline **bold**
+    const parts = trimmed.split(/(\*\*[^*]+\*\*)/g).map((chunk, i) =>
+      chunk.startsWith("**") && chunk.endsWith("**")
+        ? <strong key={i}>{chunk.slice(2, -2)}</strong>
+        : chunk
+    );
+    if (trimmed.startsWith("- ")) {
+      elements.push(
+        <div key={key++} className="flex gap-1 ml-2">
+          <span className="shrink-0">•</span>
+          <span>{parts.slice(1)}</span>
+        </div>
+      );
+    } else {
+      elements.push(<p key={key++} className="mb-0.5">{parts}</p>);
+    }
+  }
+  return <div className="text-sm space-y-0.5">{elements}</div>;
+}
+
 export function AIChat({ context, className }: AIChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -158,9 +189,9 @@ export function AIChat({ context, className }: AIChatProps) {
       </CardHeader>
 
       {!isMinimized && (
-        <CardContent className="p-0 flex flex-col h-[calc(600px-60px)]">
+        <CardContent className="p-0 flex flex-col h-[calc(600px-60px)] min-h-0 overflow-hidden">
           {/* Messages */}
-          <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+          <ScrollArea className="flex-1 min-h-0 p-4" ref={scrollRef}>
             {messages.length === 0 ? (
               <div className="space-y-4">
                 <div className="text-center py-4">
@@ -222,12 +253,11 @@ export function AIChat({ context, className }: AIChatProps) {
                       {message.parts.map((part, index) => {
                         if (part.type === "text") {
                           return (
-                            <p
-                              key={index}
-                              className="text-sm whitespace-pre-wrap"
-                            >
-                              {part.text}
-                            </p>
+                            <div key={index}>
+                              {message.role === "assistant"
+                                ? renderMarkdown(part.text)
+                                : <p className="text-sm">{part.text}</p>}
+                            </div>
                           );
                         }
                         if (part.type.startsWith("tool-")) {
