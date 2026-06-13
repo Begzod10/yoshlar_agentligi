@@ -36,6 +36,7 @@ export interface User {
   lastLogin?: string;
   organizationId?: string;
   organizationName?: string;
+  masulId?: string;
   districtId?: ToshkentDistrict; // District assignment for tashkilot_direktori
   avatar?: string;
   createdAt: string;
@@ -64,6 +65,7 @@ export interface Youth {
   notes?: string;
   status: "active" | "inactive" | "graduated" | "removed";
   assignedMasulId?: string;
+  masulId?: string;
   assignedMasulName?: string;
   organizationId?: string;
   organizationName?: string;

@@ -1256,7 +1256,7 @@ export function AppProvider({children}: { children: ReactNode }) {
             case "masul_hodim":
                 // Can only see assigned youth
                 filteredYouth = youth.filter(
-                    (y) => y.assignedMasulId === currentUser.id
+                    (y) => y.masulId === currentUser.masulId
                 );
                 break;
             default:
