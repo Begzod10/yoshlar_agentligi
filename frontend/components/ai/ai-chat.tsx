@@ -226,6 +226,13 @@ export function AIChat({ context, className }: AIChatProps) {
               </div>
             ) : (
               <div className="space-y-4">
+                <button
+                  onClick={clearChat}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <span>←</span>
+                  <span>Kategoriyalarga qaytish</span>
+                </button>
                 {messages.map((message) => (
                   <div
                     key={message.id}
