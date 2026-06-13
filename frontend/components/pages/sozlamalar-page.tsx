@@ -186,21 +186,20 @@ export function SozlamalarPage() {
     }
   };
 
-  const handleThemeChange = async (nextTheme: "light" | "dark" | "system") => {
+  const handleThemeChange = (nextTheme: "light" | "dark" | "system") => {
     setTheme(nextTheme);
-    try {
-      await updateProfilePreferences.mutateAsync({ theme: nextTheme });
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Mavzu saqlanmadi", "error");
-    }
   };
 
-  const handleLanguageChange = async (nextLanguage: "uz" | "ru" | "en") => {
+  const handleLanguageChange = (nextLanguage: "uz" | "ru" | "en") => {
     setLanguage(nextLanguage);
+  };
+
+  const handleSaveAppearance = async () => {
     try {
-      await updateProfilePreferences.mutateAsync({ language: nextLanguage });
+      await updateProfilePreferences.mutateAsync({ theme, language });
+      showToast("Ko'rinish sozlamalari saqlandi", "success");
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Til saqlanmadi", "error");
+      showToast(error instanceof Error ? error.message : "Saqlanmadi", "error");
     }
   };
 
@@ -752,7 +751,7 @@ export function SozlamalarPage() {
                     type="button"
                     variant={theme === "light" ? "default" : "outline"}
                     className="h-auto flex-col gap-2 py-4"
-                    onClick={() => void handleThemeChange("light")}
+                    onClick={() => handleThemeChange(\1)}
                   >
                     <Sun className="h-5 w-5" />
                     <span>Yorug'</span>
@@ -761,7 +760,7 @@ export function SozlamalarPage() {
                     type="button"
                     variant={theme === "dark" ? "default" : "outline"}
                     className="h-auto flex-col gap-2 py-4"
-                    onClick={() => void handleThemeChange("dark")}
+                    onClick={() => handleThemeChange(\1)}
                   >
                     <Moon className="h-5 w-5" />
                     <span>Qorong'u</span>
@@ -770,7 +769,7 @@ export function SozlamalarPage() {
                     type="button"
                     variant={theme === "system" ? "default" : "outline"}
                     className="h-auto flex-col gap-2 py-4"
-                    onClick={() => void handleThemeChange("system")}
+                    onClick={() => handleThemeChange(\1)}
                   >
                     <Monitor className="h-5 w-5" />
                     <span>Tizim</span>
@@ -782,7 +781,7 @@ export function SozlamalarPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="language">Til</Label>
-                <Select value={language} onValueChange={(value) => void handleLanguageChange(value as "uz" | "ru" | "en")}>
+                <Select value={language} onValueChange={(value) => handleLanguageChange(value as "uz" | "ru" | "en")}>
                   <SelectTrigger className="w-full md:w-[200px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -792,6 +791,11 @@ export function SozlamalarPage() {
                     <SelectItem value="en">English</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="flex justify-end pt-2">
+                <Button onClick={handleSaveAppearance} disabled={updateProfilePreferences.isPending}>
+                  {updateProfilePreferences.isPending ? "Saqlanmoqda..." : "Saqlash"}
+                </Button>
               </div>
             </CardContent>
           </Card>
