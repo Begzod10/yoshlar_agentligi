@@ -242,7 +242,7 @@ export function UchrashuvlarPage() {
       return;
     }
 
-    const masulId = isMasul ? currentUser?.id || "" : formMasulId;
+    const masulId = isMasul ? currentUser?.masulId || "" : formMasulId;
     const selectedMasulObj = masullar.find((m) => m.id === masulId);
 
     addMeeting({

@@ -1077,9 +1077,9 @@ export function AppProvider({children}: { children: ReactNode }) {
             setMeetings((prev) => [...prev, newMeeting]);
             void api
                 .post<MeetingRead>("/api/meetings", {
-                    youth_id: meetingData.youthId,
-                    masul_id: meetingData.masulId,
-                    scheduled_at: meetingData.time
+                    youthId: meetingData.youthId,
+                    masulId: meetingData.masulId || null,
+                    scheduledAt: meetingData.time
                         ? `${meetingData.date}T${meetingData.time}:00`
                         : meetingData.date,
                     type: meetingData.type,
