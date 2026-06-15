@@ -57,6 +57,7 @@ import {
   Cell,
   Legend,
 } from "recharts";
+import {useRouter} from "next/navigation";
 
 const categoryColors = [
   "var(--chart-1)",
@@ -70,6 +71,7 @@ const categoryColors = [
 function MasulDashboard() {
   const {
     currentUser,
+      currentPage,
     getVisibleYouth,
     getVisiblePlans,
     getVisibleMeetings,
@@ -77,8 +79,9 @@ function MasulDashboard() {
     setCurrentPage,
     addToast,
   } = useApp();
-
+  const router = useRouter();
   const today = new Date().toISOString().split("T")[0];
+
 
   // ISO week helper
   const getISOWeek = (dateStr: string) => {
@@ -181,7 +184,7 @@ function MasulDashboard() {
           <Button
             id="btn-quick-new-plan"
             size="sm"
-            onClick={() => setCurrentPage("rejalar")}
+            onClick={() => router.push("/rejalar")}
             className="gap-2"
           >
             <Plus className="h-4 w-4" />
@@ -191,7 +194,8 @@ function MasulDashboard() {
             id="btn-quick-new-meeting"
             size="sm"
             variant="outline"
-            onClick={() => setCurrentPage("uchrashuvlar")}
+            onClick={() => router.push("/uchrashuvlar")}
+            // onClick={() => setCurrentPage("uchrashuvlar")}
             className="gap-2"
           >
             <Calendar className="h-4 w-4" />
@@ -406,7 +410,7 @@ function MasulDashboard() {
                       size="sm"
                       variant="outline"
                       className="text-xs shrink-0"
-                      onClick={() => setCurrentPage("uchrashuvlar")}
+                      onClick={() => router.push("/uchrashuvlar")}
                     >
                       <Plus className="h-3 w-3 mr-1" />
                       Uchrashuv
