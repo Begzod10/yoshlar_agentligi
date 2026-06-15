@@ -521,7 +521,10 @@ export function YoshlarPage() {
                 </TableRow>
               ) : (
                 filteredYouth.map((youth) => (
-                  <TableRow key={youth.id}>
+                  <TableRow   onClick={() => {
+                    setSelectedYouth(youth);
+                    setIsViewDialogOpen(true);
+                  }} key={youth.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -575,15 +578,15 @@ export function YoshlarPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Amallar</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSelectedYouth(youth);
-                              setIsViewDialogOpen(true);
-                            }}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Ko'rish
-                          </DropdownMenuItem>
+                          {/*<DropdownMenuItem*/}
+                          {/*  onClick={() => {*/}
+                          {/*    setSelectedYouth(youth);*/}
+                          {/*    setIsViewDialogOpen(true);*/}
+                          {/*  }}*/}
+                          {/*>*/}
+                          {/*  <Eye className="h-4 w-4 mr-2" />*/}
+                          {/*  Ko'rish*/}
+                          {/*</DropdownMenuItem>*/}
                           <DropdownMenuItem
                             onClick={() => {
                               setSelectedYouth(youth);
