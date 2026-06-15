@@ -149,6 +149,7 @@ function apiUserToAppUser(user: ApiUser): User {
         status: user.isActive ? "active" : "inactive",
         lastLogin: user.lastLoginAt ?? undefined,
         districtId: user.districtId ? asDistrict(user.districtId) : undefined,
+        masulId: user.masulId ?? undefined,
         createdAt: user.createdAt,
     };
 }
@@ -227,6 +228,11 @@ export function planToApp(plan: PlanRead, youth: Youth[], masullar: Masul[]): In
         endDate: plan.endDate ?? "",
         status: plan.status === "draft" ? "planned" : plan.status,
         progress: plan.progress,
+        milestones: (plan.milestones ?? []).map((m) => ({
+            title: String((m as Record<string, unknown>).title ?? ""),
+            done: Boolean((m as Record<string, unknown>).done ?? false),
+            dueDate: ((m as Record<string, unknown>).dueDate as string | null) ?? null,
+        })),
         createdAt: plan.createdAt,
     };
 }
@@ -977,13 +983,13 @@ export function AppProvider({children}: { children: ReactNode }) {
             setPlans((prev) => [...prev, newPlan]);
 
             const payload = {
-                youth_id: planData.youthId,
-                masul_id: planData.masulId, // 🔥 FIX HERE
+                youthId: planData.youthId,
+                masulId: planData.masulId || null,
                 title: planData.title,
                 goal: planData.description || null,
                 milestones: [],
-                start_date: planData.startDate || null,
-                end_date: planData.endDate || null,
+                startDate: planData.startDate || null,
+                endDate: planData.endDate || null,
             };
 
             void api
@@ -1023,6 +1029,7 @@ export function AppProvider({children}: { children: ReactNode }) {
                     progress: data.progress,
                     startDate: data.startDate,
                     endDate: data.endDate,
+                    milestones: data.milestones,
                 })
                 .then(() => queryClient.invalidateQueries({queryKey: ["plans"]}))
                 .catch(() =>
@@ -1070,9 +1077,9 @@ export function AppProvider({children}: { children: ReactNode }) {
             setMeetings((prev) => [...prev, newMeeting]);
             void api
                 .post<MeetingRead>("/api/meetings", {
-                    youth_id: meetingData.youthId,
-                    masul_id: meetingData.masulId,
-                    scheduled_at: meetingData.time
+                    youthId: meetingData.youthId,
+                    masulId: meetingData.masulId || null,
+                    scheduledAt: meetingData.time
                         ? `${meetingData.date}T${meetingData.time}:00`
                         : meetingData.date,
                     type: meetingData.type,
@@ -1256,7 +1263,7 @@ export function AppProvider({children}: { children: ReactNode }) {
             case "masul_hodim":
                 // Can only see assigned youth
                 filteredYouth = youth.filter(
-                    (y) => y.masulId === currentUser.masulId
+                    (y) => y.assignedMasulId === currentUser.masulId
                 );
                 break;
             default:
@@ -1326,7 +1333,7 @@ export function AppProvider({children}: { children: ReactNode }) {
                     return masul?.districtId === currentUser.districtId;
                 });
             case "masul_hodim":
-                return plans.filter((p) => p.masulId === currentUser.id);
+                return plans.filter((p) => p.masulId === currentUser.masulId);
             default:
                 return [];
         }
@@ -1351,7 +1358,7 @@ export function AppProvider({children}: { children: ReactNode }) {
                     return masul?.districtId === currentUser.districtId;
                 });
             case "masul_hodim":
-                return meetings.filter((m) => m.masulId === currentUser.id);
+                return meetings.filter((m) => m.masulId === currentUser.masulId);
             default:
                 return [];
         }

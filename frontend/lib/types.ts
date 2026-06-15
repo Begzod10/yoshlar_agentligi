@@ -94,6 +94,12 @@ export interface Masul {
   createdAt: string;
 }
 
+export interface PlanMilestone {
+  title: string;
+  done: boolean;
+  dueDate?: string | null;
+}
+
 export interface IndividualPlan {
   id: string;
   youthId: string;
@@ -106,6 +112,7 @@ export interface IndividualPlan {
   endDate: string;
   status: "planned" | "pending" | "in_progress" | "completed" | "cancelled";
   progress: number;
+  milestones: PlanMilestone[];
   tasks?: unknown[];
   createdAt: string;
 }
