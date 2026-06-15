@@ -24,8 +24,16 @@ _ROLES = (
     UserRole.DIREKTOR,
     UserRole.TASHKILOT_DIREKTORI,
     UserRole.MASUL_HODIM,
+    UserRole.MODERATOR,
+)
+_WRITE_ROLES = (
+    UserRole.ADMIN,
+    UserRole.DIREKTOR,
+    UserRole.TASHKILOT_DIREKTORI,
+    UserRole.MASUL_HODIM,
 )
 Access = Annotated[CurrentUser, Depends(require_role(*_ROLES))]
+WriteAccess = Annotated[CurrentUser, Depends(require_role(*_WRITE_ROLES))]
 
 
 def _service(session: DbSession) -> MeetingsService:
@@ -53,7 +61,7 @@ async def list_meetings(
 
 @router.post("", response_model=MeetingRead, status_code=status.HTTP_201_CREATED)
 async def create_meeting(
-    payload: MeetingCreate, current: Access, session: DbSession, audit: AuditDep
+    payload: MeetingCreate, current: WriteAccess, session: DbSession, audit: AuditDep
 ) -> MeetingRead:
     meeting = await _service(session).create(current, payload)
     meeting_id = meeting.id
@@ -76,7 +84,7 @@ async def get_meeting(
 async def update_meeting(
     meeting_id: UUID,
     payload: MeetingUpdate,
-    current: Access,
+    current: WriteAccess,
     session: DbSession,
     audit: AuditDep,
 ) -> MeetingRead:
@@ -95,7 +103,7 @@ async def update_meeting(
 @router.patch("/{meeting_id}/attendance", response_model=MeetingRead)
 async def update_attendance(
     meeting_id: UUID,
-    current: Access,
+    current: WriteAccess,
     session: DbSession,
     audit: AuditDep,
     attendance_status: Annotated[MeetingAttendance, Form(alias="attendanceStatus")],
@@ -156,7 +164,7 @@ async def update_attendance(
 
 @router.delete("/{meeting_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_meeting(
-    meeting_id: UUID, current: Access, session: DbSession, audit: AuditDep
+    meeting_id: UUID, current: WriteAccess, session: DbSession, audit: AuditDep
 ) -> None:
     await _service(session).soft_delete(current, meeting_id)
     await audit.record("meeting.delete", "meeting", meeting_id)

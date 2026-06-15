@@ -23,8 +23,16 @@ _ROLES = (
     UserRole.DIREKTOR,
     UserRole.TASHKILOT_DIREKTORI,
     UserRole.MASUL_HODIM,
+    UserRole.MODERATOR,
+)
+_WRITE_ROLES = (
+    UserRole.ADMIN,
+    UserRole.DIREKTOR,
+    UserRole.TASHKILOT_DIREKTORI,
+    UserRole.MASUL_HODIM,
 )
 Access = Annotated[CurrentUser, Depends(require_role(*_ROLES))]
+WriteAccess = Annotated[CurrentUser, Depends(require_role(*_WRITE_ROLES))]
 
 
 def _service(session: DbSession) -> PlansService:
@@ -51,7 +59,7 @@ async def list_plans(
 
 @router.post("", response_model=PlanRead, status_code=status.HTTP_201_CREATED)
 async def create_plan(
-    payload: PlanCreate, current: Access, session: DbSession, audit: AuditDep
+    payload: PlanCreate, current: WriteAccess, session: DbSession, audit: AuditDep
 ) -> PlanRead:
     plan = await _service(session).create(current, payload)
     plan_id = plan.id
@@ -72,7 +80,7 @@ async def get_plan(plan_id: UUID, current: Access, session: DbSession) -> PlanRe
 async def update_plan(
     request: Request,
     plan_id: UUID,
-    current: Access,
+    current: WriteAccess,
     session: DbSession,
     audit: AuditDep,
 ) -> PlanRead:
@@ -140,7 +148,7 @@ async def update_plan(
 @router.patch("/{plan_id}/progress", response_model=PlanRead)
 async def update_plan_progress(
     plan_id: UUID,
-    current: Access,
+    current: WriteAccess,
     session: DbSession,
     audit: AuditDep,
     progress: Annotated[int | None, Form()] = None,
@@ -186,7 +194,7 @@ async def update_plan_progress(
 
 @router.delete("/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_plan(
-    plan_id: UUID, current: Access, session: DbSession, audit: AuditDep
+    plan_id: UUID, current: WriteAccess, session: DbSession, audit: AuditDep
 ) -> None:
     await _service(session).soft_delete(current, plan_id)
     await audit.record("plan.delete", "plan", plan_id)

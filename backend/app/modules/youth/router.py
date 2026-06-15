@@ -27,8 +27,16 @@ _ROLES = (
     UserRole.DIREKTOR,
     UserRole.TASHKILOT_DIREKTORI,
     UserRole.MASUL_HODIM,
+    UserRole.MODERATOR,
+)
+_WRITE_ROLES = (
+    UserRole.ADMIN,
+    UserRole.DIREKTOR,
+    UserRole.TASHKILOT_DIREKTORI,
+    UserRole.MASUL_HODIM,
 )
 Access = Annotated[CurrentUser, Depends(require_role(*_ROLES))]
+WriteAccess = Annotated[CurrentUser, Depends(require_role(*_WRITE_ROLES))]
 
 
 def _service(session: DbSession) -> YouthService:
@@ -62,7 +70,7 @@ async def list_youth(
 
 @router.post("", response_model=YouthRead, status_code=status.HTTP_201_CREATED)
 async def create_youth(
-    payload: YouthCreate, current: Access, session: DbSession, audit: AuditDep
+    payload: YouthCreate, current: WriteAccess, session: DbSession, audit: AuditDep
 ) -> YouthRead:
     youth = await _service(session).create(current, payload)
     youth_id = youth.id
@@ -85,7 +93,7 @@ async def get_youth(
 async def update_youth(
     youth_id: UUID,
     payload: YouthUpdate,
-    current: Access,
+    current: WriteAccess,
     session: DbSession,
     audit: AuditDep,
 ) -> YouthRead:
@@ -111,7 +119,7 @@ async def update_youth(
 async def assign_masul(
     youth_id: UUID,
     payload: YouthAssignMasul,
-    current: Access,
+    current: WriteAccess,
     session: DbSession,
     audit: AuditDep,
 ) -> YouthRead:
@@ -127,7 +135,7 @@ async def assign_masul(
 async def set_youth_status(
     youth_id: UUID,
     payload: YouthStatusUpdate,
-    current: Access,
+    current: WriteAccess,
     session: DbSession,
     audit: AuditDep,
 ) -> YouthRead:
@@ -141,7 +149,7 @@ async def set_youth_status(
 
 @router.delete("/{youth_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_youth(
-    youth_id: UUID, current: Access, session: DbSession, audit: AuditDep
+    youth_id: UUID, current: WriteAccess, session: DbSession, audit: AuditDep
 ) -> None:
     await _service(session).soft_delete(current, youth_id)
     await audit.record("youth.delete", "youth", youth_id)
